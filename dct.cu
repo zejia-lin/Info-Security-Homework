@@ -91,7 +91,7 @@ namespace cg = cooperative_groups;
 /**
 *  The dimension of pixels block
 */
-#define BLOCK_SIZE 3
+#define BLOCK_SIZE 8
 
 /**
 **************************************************************************
