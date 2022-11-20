@@ -52,12 +52,24 @@ void dct_cpu_tiled(const float *A, float *res, int N){
 }
 
 
+__constant__ float COSINES[81] = {
+    1.0, 0.8660254037844387, 0.5000000000000001, 6.123233995736766e-17, -0.4999999999999998, -0.8660254037844387, -1.0, -0.8660254037844388, -0.5000000000000004,
+    1.0, 6.123233995736766e-17, -1.0, -1.8369701987210297e-16, 1.0, 1.1943401194869635e-15, -1.0, -4.286263797015736e-16, 1.0,
+    1.0, -0.8660254037844387, 0.5000000000000001, 1.1943401194869635e-15, -0.49999999999999983, 0.8660254037844383, -1.0, 0.8660254037844386, -0.5000000000000003,
+    1.0, -0.8660254037844388, 0.5000000000000006, -4.286263797015736e-16, -0.499999999999999, 0.8660254037844386, -1.0, 0.8660254037844395, -0.500000000000002,
+    1.0, -1.8369701987210297e-16, -1.0, 5.51091059616309e-16, 1.0, 8.578717400397356e-16, -1.0, -4.904777002955296e-16, 1.0,
+    1.0, 0.8660254037844384, 0.4999999999999991, 1.1028010998692062e-15, -0.5000000000000018, -0.8660254037844377, -1.0, -0.8660254037844382, -0.4999999999999964,
+    1.0, 0.8660254037844386, 0.49999999999999994, 2.57237725884603e-15, -0.5000000000000001, -0.8660254037844383, -1.0, -0.8660254037844398, -0.4999999999999998,
+    1.0, 1.1943401194869635e-15, -1.0, 8.578717400397356e-16, 1.0, -2.45548340466059e-16, -1.0, 3.185938619692883e-15, 1.0,
+    1.0, -0.8660254037844388, 0.5000000000000004, 2.8173066186755008e-15, -0.49999999999999917, 0.866025403784438, -1.0, 0.8660254037844359, -0.5000000000000017
+};
+
+
 __device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
     float tmp = 0;
     for(int x = 0; x < TILE_DIM; ++x){
         for(int y = 0; y < TILE_DIM; ++y){
-            tmp += A[IDX(x, y, lda)] * cos((2 * x + 1) * u * M_PI / (2 * TILE_DIM))  
-                                     * cos((2 * y + 1) * v * M_PI / (2 * TILE_DIM));
+            tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, 9)] * COSINES[IDX(y, v, 9)];
         }
     }
     float alpha_u = SQRT2;
@@ -73,9 +85,6 @@ __device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
 */
 __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
-    // shared memory size equals to blockDim
-    extern __shared__ float sA[];
-
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     int tile_per_row = rows / TILE_DIM;
     int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
@@ -89,24 +98,9 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
         int tile_offset_to_A = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
-        // copy to shared memory
-        sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
-                 tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
-        __syncthreads();
-        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]);
-
-        // compute the starting address of current tile in sA
-        // int smem_id = threadIdx.x;
-        // int smem_x = smem_id / tile_per_row;
-        // int smem_y = smem_id % tile_per_row;
-        // float *tile_ptr_to_shared = &sA[smem_x * TILE_DIM * TILE_DIM * tile_per_row + smem_y * TILE_DIM];
         float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
 
         dct_tile(tile_ptr_to_A, cols, elm_ptr_to_res, threadIdx.y, threadIdx.z);
-        __syncthreads();
-
-        // printf("(%d, %d, %d): %d, %f\n", tile_id, threadIdx.y, threadIdx.z, 
-        //             tile_offset_to_A + threadIdx.y * cols + threadIdx.z, *elm_ptr_to_res);
     }
 
 }
@@ -116,7 +110,6 @@ int main(int argc, char **argv) {
 
     uint64_t compute_time;
     size_t N = atoll(argv[1]);
-    std::cout << "Read " << N << std::endl;
     // float A[N * N];//, res[N * N];
     // for (size_t i = 0; i < N * N; ++i) {
     //     std::cout << i << ',';
@@ -139,8 +132,6 @@ int main(int argc, char **argv) {
 
     cudaMemcpy(dA, dA, sizeof(float) * N * N, cudaMemcpyDefault);
     cudaDeviceSynchronize();
-
-    std::cout << "Created matrix\n";
 
     dim3 dimGrid = dim3(128);
     dim3 dimBlock = dim3(64, TILE_DIM, TILE_DIM);
