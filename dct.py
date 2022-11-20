@@ -8,7 +8,7 @@ from skimage.metrics import mean_squared_error
 
 np.set_printoptions(3, suppress=True)
 
-N = 6
+N = 2562
 
 a = np.array(range(N * N)).reshape(N, N).astype(np.float32)
 cpu = np.zeros_like(a)

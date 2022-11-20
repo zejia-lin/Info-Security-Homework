@@ -85,6 +85,9 @@ __device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
 */
 __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
+    // shared memory size equals to blockDim
+    extern __shared__ float sA[];
+
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     int tile_per_row = rows / TILE_DIM;
     int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
@@ -98,9 +101,17 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
         int tile_offset_to_A = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
-        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
+        // copy to shared memory
+        sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
+                 tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
+        __syncthreads();
 
-        dct_tile(tile_ptr_to_A, cols, elm_ptr_to_res, threadIdx.y, threadIdx.z);
+        // compute the starting address of current tile in sA
+        float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
+        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
+        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_shared[threadIdx.y * 9 + threadIdx.z]);
+
+        dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
     }
 
 }
@@ -137,12 +148,15 @@ int main(int argc, char **argv) {
     dim3 dimBlock = dim3(64, TILE_DIM, TILE_DIM);
     int smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
 
-    for(int _iter = 0; _iter < 1; ++_iter){
+    for(int _iter = 0; _iter < 10; ++_iter){
         __TIMER_START__
         dct_gpu<<<dimGrid, dimBlock, smemSize>>>(dA, dRes, N, N);
         cudaDeviceSynchronize();
         __TIMER_STOP__(compute_time);
-        std::cout << cudaGetErrorString(cudaGetLastError()) << std::endl;
+        auto err = cudaGetLastError();
+        if(err != cudaSuccess){
+            std::cout << cudaGetErrorString(err) << std::endl;
+        }
         std::cout << "GPU time " << double(compute_time) / 1000. << " ms\n";
     }
 
