@@ -1,6 +1,13 @@
 
 #include "myutils.cpp"
 
+
+#define TILE_DIM 3
+
+#define SQRT1 0.5773502691896257 // sqrt(1 / 3)
+#define SQRT2 0.816496580927726  // sqrt(2 / 3)
+
+
 void dct_cpu(float *A, float *res, int N){
     float tmp, alpha_u, alpha_v;
     for(int u = 0; u < N; ++u){
@@ -8,8 +15,8 @@ void dct_cpu(float *A, float *res, int N){
             tmp = 0;
             for(int x = 0; x < N; ++x){
                 for(int y = 0; y < N; ++y){
-                    tmp += A[IDX(x, y, N)] * cos((2 * x + 1) * u * M_PI / 2 / N)  
-                                           * cos((2 * y + 1) * v * M_PI / 2 / N);
+                    tmp += A[IDX(x, y, N)] * cos((2 * x + 1) * u * M_PI / (2 * N))  
+                                           * cos((2 * y + 1) * v * M_PI / (2 * N));
                 }
             }
             if(u == 0) alpha_u = sqrt(1. / N);
@@ -21,10 +28,28 @@ void dct_cpu(float *A, float *res, int N){
     }
 }
 
-#define TILE_DIM 3
+void cpu_dct_tile(const float *A, int lda, float *res, int u, int v){
+    float tmp = 0;
+    for(int x = 0; x < TILE_DIM; ++x){
+        for(int y = 0; y < TILE_DIM; ++y){
+            tmp += A[IDX(x, y, lda)] * cos((2 * x + 1) * u * M_PI / (2 * TILE_DIM))  
+                                     * cos((2 * y + 1) * v * M_PI / (2 * TILE_DIM));
+        }
+    }
+    float alpha_u = SQRT2;
+    float alpha_v = SQRT2;
+    if(u == 0) alpha_u = SQRT1;
+    if(v == 0) alpha_v = SQRT1;
+    *res = alpha_u * alpha_v * tmp;
+}
 
-#define SQRT1 0.5773502691896257 // sqrt(1 / 3)
-#define SQRT2 0.816496580927726  // sqrt(2 / 3)
+void dct_cpu_tiled(const float *A, float *res, int N){
+    for(int u = 0; u < N; ++u){
+        for(int v = 0; v < N; ++v){
+            cpu_dct_tile(A, N, &res[IDX(u, v, N)], u, v);
+        }
+    }
+}
 
 
 __device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
@@ -32,7 +57,7 @@ __device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
     for(int x = 0; x < TILE_DIM; ++x){
         for(int y = 0; y < TILE_DIM; ++y){
             tmp += A[IDX(x, y, lda)] * cos((2 * x + 1) * u * M_PI / (2 * TILE_DIM))  
-                                    * cos((2 * y + 1) * v * M_PI / 2 / (2 * TILE_DIM));
+                                     * cos((2 * y + 1) * v * M_PI / (2 * TILE_DIM));
         }
     }
     float alpha_u = SQRT2;
@@ -70,17 +95,17 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
         // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]);
 
         // compute the starting address of current tile in sA
-        int smem_id = threadIdx.x;
-        int smem_x = smem_id / tile_per_row;
-        int smem_y = smem_id % tile_per_row;
-        float *tile_ptr_to_shared = &sA[smem_x * TILE_DIM * TILE_DIM * tile_per_row + smem_y * TILE_DIM];
+        // int smem_id = threadIdx.x;
+        // int smem_x = smem_id / tile_per_row;
+        // int smem_y = smem_id % tile_per_row;
+        // float *tile_ptr_to_shared = &sA[smem_x * TILE_DIM * TILE_DIM * tile_per_row + smem_y * TILE_DIM];
         float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
 
-        dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
+        dct_tile(tile_ptr_to_A, cols, elm_ptr_to_res, threadIdx.y, threadIdx.z);
         __syncthreads();
 
-        printf("(%d, %d, %d): %d, %f\n", tile_id, threadIdx.y, threadIdx.z, 
-                    tile_offset_to_A + threadIdx.y * cols + threadIdx.z, *elm_ptr_to_res);
+        // printf("(%d, %d, %d): %d, %f\n", tile_id, threadIdx.y, threadIdx.z, 
+        //             tile_offset_to_A + threadIdx.y * cols + threadIdx.z, *elm_ptr_to_res);
     }
 
 }
@@ -89,21 +114,26 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 int main(int argc, char **argv) {
 
     uint64_t compute_time;
-    int N = atoi(argv[1]);
-    float A[N * N];
-    for (int i = 0; i < N * N; ++i) {
-        A[i] = i;
-    }
+    size_t N = atoll(argv[1]);
+    std::cout << "Read " << N << std::endl;
+    // float A[N * N];//, res[N * N];
+    // for (size_t i = 0; i < N * N; ++i) {
+    //     std::cout << i << ',';
+    //     A[i] = i;
+    // }
 
-    // dct_cpu(A, res, N);
+    // cpu_dct_tile(A, N, res, 0, 1);
+    // std::cout << "(0, 1): " << *res << std::endl;
+
+    // dct_cpu_tiled(A, res, N);
     // print_matrix(res, N, N);
     // writebin("./out/cpu_9.bin", res, sizeof(float) * N * N);
 
     float *dA, *dRes;
     cudaMallocManaged(&dA, sizeof(float) * N * N);
     cudaMallocManaged(&dRes, sizeof(float) * N * N);
-    for (int i = 0; i < N * N; ++i) {
-        dA[i] = A[i];
+    for (size_t i = 0; i < N * N; ++i) {
+        dA[i] = i;
     }
 
     cudaMemcpy(dA, dA, sizeof(float) * N * N, cudaMemcpyDefault);
@@ -111,8 +141,8 @@ int main(int argc, char **argv) {
 
     std::cout << "Created matrix\n";
 
-    dim3 dimGrid = dim3(1);
-    dim3 dimBlock = dim3(1, TILE_DIM, TILE_DIM);
+    dim3 dimGrid = dim3(128);
+    dim3 dimBlock = dim3(64, TILE_DIM, TILE_DIM);
     int smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
 
     for(int _iter = 0; _iter < 1; ++_iter){

@@ -31,7 +31,7 @@ using clock_type = chrono::high_resolution_clock;
 void print_matrix(float *A, int rows, int cols){
     for(int i = 0; i < rows; ++i){
         for(int j = 0; j < cols; ++j){
-            std::cout << A[IDX(i, j, cols)] << ", ";
+            printf("%.3f, ", A[IDX(i, j, cols)]);
         }
         std::cout << std::endl;
     }
