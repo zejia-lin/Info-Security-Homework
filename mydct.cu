@@ -27,7 +27,7 @@ void dct_cpu(float *A, float *res, int N){
 #define SQRT2 0.816496580927726  // sqrt(2 / 3)
 
 
-__device__ void dct_tile(float *A, int lda, float *res, int u, int v){
+__device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
     float tmp = 0;
     for(int x = 0; x < TILE_DIM; ++x){
         for(int y = 0; y < TILE_DIM; ++y){
@@ -46,55 +46,56 @@ __device__ void dct_tile(float *A, int lda, float *res, int u, int v){
 /**
  * Should be launched with 3D block: (__, 3, 3) and 1D grid, shared mem size equals to blockDim
 */
-__global__ void dct_gpu(float *A, float *res, int rows, int cols){
-
-    int tile_per_row = rows / TILE_DIM;
+__global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
     // shared memory size equals to blockDim
     extern __shared__ float sA[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    int num_tiles = (rows * cols) / (TILE_DIM * TILE_DIM);
+    int tile_per_row = rows / TILE_DIM;
     
     // grid stride loop
-    for(; tile_id < num_tiles; tile_id += gridDim.x){
+    for(; tile_id < (rows * cols) / (TILE_DIM * TILE_DIM); tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
         int tile_y = tile_id % tile_per_row;
         int tile_offset_to_A = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
-        float *tile_ptr_to_A = &A[tile_offset_to_A];
+        const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
         // copy to shared memory
         sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
                  tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
         __syncthreads();
-        printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]);
+        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]);
 
         // compute the starting address of current tile in sA
         int smem_id = threadIdx.x;
         int smem_x = smem_id / tile_per_row;
         int smem_y = smem_id % tile_per_row;
         float *tile_ptr_to_shared = &sA[smem_x * TILE_DIM * TILE_DIM * tile_per_row + smem_y * TILE_DIM];
-        float *ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
+        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
 
-        dct_tile(tile_ptr_to_shared, TILE_DIM, ptr_to_res, threadIdx.y, threadIdx.z);
-        
+        dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
         __syncthreads();
+
+        printf("(%d, %d, %d): %d, %f\n", tile_id, threadIdx.y, threadIdx.z, 
+                    tile_offset_to_A + threadIdx.y * cols + threadIdx.z, *elm_ptr_to_res);
     }
 
 }
 
 
-int main() {
+int main(int argc, char **argv) {
 
-    int N = 6;
-    float A[N * N], res[N * N];
+    uint64_t compute_time;
+    int N = atoi(argv[1]);
+    float A[N * N];
     for (int i = 0; i < N * N; ++i) {
         A[i] = i;
     }
 
-    dct_cpu(A, res, N);
+    // dct_cpu(A, res, N);
     // print_matrix(res, N, N);
     // writebin("./out/cpu_9.bin", res, sizeof(float) * N * N);
 
@@ -105,12 +106,25 @@ int main() {
         dA[i] = A[i];
     }
 
-    dim3 dimGrid = dim3(1, 1);
-    dim3 dimBlock = dim3(1, 3, 3);
-    dct_gpu<<<dimGrid, dimBlock, 128 * sizeof(float)>>>(dA, dRes, N, N);
+    cudaMemcpy(dA, dA, sizeof(float) * N * N, cudaMemcpyDefault);
     cudaDeviceSynchronize();
 
-    std::cout << cudaGetErrorString(cudaGetLastError()) << std::endl;
+    std::cout << "Created matrix\n";
+
+    dim3 dimGrid = dim3(1);
+    dim3 dimBlock = dim3(1, TILE_DIM, TILE_DIM);
+    int smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
+
+    for(int _iter = 0; _iter < 1; ++_iter){
+        __TIMER_START__
+        dct_gpu<<<dimGrid, dimBlock, smemSize>>>(dA, dRes, N, N);
+        cudaDeviceSynchronize();
+        __TIMER_STOP__(compute_time);
+        std::cout << cudaGetErrorString(cudaGetLastError()) << std::endl;
+        std::cout << "GPU time " << double(compute_time) / 1000. << " ms\n";
+    }
+
+
 
     // print_matrix(dRes, N, N);
 

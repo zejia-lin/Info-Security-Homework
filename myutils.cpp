@@ -2,10 +2,31 @@
 #include <iostream>
 #include <sys/stat.h>
 #include <fstream>
+#include <chrono>
 
 #ifndef IDX
 #define IDX(i, j, ld) (((i) * (ld)) + j)
 #endif
+
+namespace chrono = std::chrono;
+using clock_type = chrono::high_resolution_clock;
+
+#define ENABLE_TIMER
+
+#ifdef ENABLE_TIMER
+#define __TIMER_START__ { \
+    auto _start_timer = clock_type::now();
+
+#define __TIMER_STOP__(_duration) \
+    auto _end_timer = clock_type::now(); \
+    _duration = chrono::duration_cast<chrono::microseconds>(_end_timer - _start_timer).count(); \
+}
+#else
+#define __TIMER_START__
+#define __TIMER_STOP__(_duration)
+#endif
+
+
 
 void print_matrix(float *A, int rows, int cols){
     for(int i = 0; i < rows; ++i){
