@@ -26,14 +26,14 @@ subprocess.run(f"build/mydct {N}".split()).check_returncode()
 
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 
-gpu = np.fromfile('./out/gpu_9.bin', dtype=np.float32).reshape(N, N)
+gpu = np.fromfile('./out/gpu_dct.bin', dtype=np.float32).reshape(N, N)
 
 # print('\nA\n', a)
 # print('\ncpu\n', cpu)
 # print('\ngpu\n', gpu)
 
 print("MSE: ", mean_squared_error(gpu, cpu))
-print("SSIM: ", ssim(gpu, cpu))
+# print("SSIM: ", ssim(gpu, cpu))
 # print(pd.DataFrame(np.sqrt((gpu - cpu) ** 2).flatten()).describe())
 
 
@@ -47,20 +47,27 @@ gpu_inv = np.zeros_like(gpu)
 st_time = time.time()
 blocked_idct(gpu, gpu_inv)
 ed_time = time.time()
-print("Finish CPU inv")
+print("Finish CPU inv for GPU dct")
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 print("MSE: ", mean_squared_error(gpu_inv, a))
-print("SSIM: ", ssim(gpu_inv, a))
+# print("SSIM: ", ssim(gpu_inv, a))
 
 print("======================================================")
 cpu_inv = np.zeros_like(gpu)
 st_time = time.time()
 blocked_idct(cpu, cpu_inv)
 ed_time = time.time()
-print("Finish CPU inv")
+print("Finish CPU inv for CPU dct")
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 print("MSE: ", mean_squared_error(cpu_inv, a))
-print("SSIM: ", ssim(cpu_inv, a))
+# print("SSIM: ", ssim(cpu_inv, a))
+
+print("======================================================")
+gpugpu_inv = np.fromfile('./out/gpu_idct.bin', dtype=np.float32).reshape(N, N)
+print("Finish GPU inv for GPU dct")
+print("MSE: ", mean_squared_error(gpugpu_inv, a))
+
+print(gpugpu_inv)
 
 
 # print(pd.DataFrame(np.sqrt((gpu_inv - a) ** 2).flatten()).describe())
