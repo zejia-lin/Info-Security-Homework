@@ -78,9 +78,10 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     int tile_per_row = rows / TILE_DIM;
+    int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
     
     // grid stride loop
-    for(; tile_id < (rows * cols) / (TILE_DIM * TILE_DIM); tile_id += gridDim.x){
+    for(; tile_id < num_tiles; tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
