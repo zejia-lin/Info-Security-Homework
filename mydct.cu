@@ -65,17 +65,17 @@ __constant__ float COSINES[81] = {
 };
 
 
-__device__ void dct_tile(const float *A, int lda, float *res, int u, int v){
+__device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, int u, int v){
     float tmp = 0;
+#pragma unroll
     for(int x = 0; x < TILE_DIM; ++x){
+#pragma unroll
         for(int y = 0; y < TILE_DIM; ++y){
             tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, 9)] * COSINES[IDX(y, v, 9)];
         }
     }
-    float alpha_u = SQRT2;
-    float alpha_v = SQRT2;
-    if(u == 0) alpha_u = SQRT1;
-    if(v == 0) alpha_v = SQRT1;
+    float alpha_u = (u == 0)? SQRT1: SQRT2;
+    float alpha_v = (v == 0)? SQRT1: SQRT2;
     *res = alpha_u * alpha_v * tmp;
 }
 
@@ -87,12 +87,14 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
     // shared memory size equals to blockDim
     extern __shared__ float sA[];
+    // extern __shared__ float sRes[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     int tile_per_row = rows / TILE_DIM;
     int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
     
     // grid stride loop
+#pragma unroll
     for(; tile_id < num_tiles; tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
@@ -108,10 +110,13 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
+        // float *elm_ptr_to_sRes = &sRes[threadIdx.x * TILE_DIM * TILE_DIM];
         float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
         // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_shared[threadIdx.y * 9 + threadIdx.z]);
 
         dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
+        
+        // *elm_ptr_to_res = *elm_ptr_to_sRes;
     }
 
 }
@@ -144,11 +149,11 @@ int main(int argc, char **argv) {
     cudaMemcpy(dA, dA, sizeof(float) * N * N, cudaMemcpyDefault);
     cudaDeviceSynchronize();
 
-    dim3 dimGrid = dim3(128);
-    dim3 dimBlock = dim3(64, TILE_DIM, TILE_DIM);
-    int smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
 
-    for(int _iter = 0; _iter < 10; ++_iter){
+    for(int _iter = 0; _iter < 1; ++_iter){
         __TIMER_START__
         dct_gpu<<<dimGrid, dimBlock, smemSize>>>(dA, dRes, N, N);
         cudaDeviceSynchronize();
