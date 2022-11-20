@@ -95,7 +95,7 @@ __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, in
     for(int x = 0; x < TILE_DIM; ++x){
 #pragma unroll
         for(int y = 0; y < TILE_DIM; ++y){
-            tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, 9)] * COSINES[IDX(y, v, 9)];
+            tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, TILE_DIM * TILE_DIM)] * COSINES[IDX(y, v, TILE_DIM * TILE_DIM)];
         }
     }
     *res = ALPHAS[u] * ALPHAS[v] * tmp;
@@ -144,7 +144,7 @@ __device__ __forceinline__ void idct_tile(const float *A, int lda, float *res, i
     for(int x = 0; x < TILE_DIM; ++x){
 #pragma unroll
         for(int y = 0; y < TILE_DIM; ++y){
-            tmp += ALPHAS[x] * ALPHAS[y] * A[IDX(x, y, lda)] * COSINES[IDX(u, x, 9)] * COSINES[IDX(v, y, 9)];
+            tmp += ALPHAS[x] * ALPHAS[y] * A[IDX(x, y, lda)] * COSINES[IDX(u, x, TILE_DIM * TILE_DIM)] * COSINES[IDX(v, y, TILE_DIM * TILE_DIM)];
         }
     }
     *res = tmp;
