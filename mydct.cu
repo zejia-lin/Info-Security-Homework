@@ -64,6 +64,10 @@ __constant__ float COSINES[81] = {
     1.0, -0.8660254037844388, 0.5000000000000004, 2.8173066186755008e-15, -0.49999999999999917, 0.866025403784438, -1.0, 0.8660254037844359, -0.5000000000000017
 };
 
+__constant__ float ALPHAS[9] = {
+    SQRT1, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2
+};
+
 
 __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, int u, int v){
     float tmp = 0;
@@ -74,9 +78,7 @@ __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, in
             tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, 9)] * COSINES[IDX(y, v, 9)];
         }
     }
-    float alpha_u = (u == 0)? SQRT1: SQRT2;
-    float alpha_v = (v == 0)? SQRT1: SQRT2;
-    *res = alpha_u * alpha_v * tmp;
+    *res = ALPHAS[u] * ALPHAS[v] * tmp;
 }
 
 
