@@ -54,28 +54,29 @@ __global__ void dct_gpu(float *A, float *res, int rows, int cols){
     extern __shared__ float sA[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    int stride_x = TILE_DIM * TILE_DIM * gridDim.x;
+    int num_tiles = (rows * cols) / (TILE_DIM * TILE_DIM);
     
     // grid stride loop
-    for(; tile_id < rows * cols - TILE_DIM * TILE_DIM; tile_id += stride_x){
+    for(; tile_id < num_tiles; tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
         int tile_y = tile_id % tile_per_row;
-        int origin_ptr_offset = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
-        float *tile_ptr_to_A = &A[origin_ptr_offset];
+        int tile_offset_to_A = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
+        float *tile_ptr_to_A = &A[tile_offset_to_A];
         
         // copy to shared memory
         sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
                  tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
         __syncthreads();
+        printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]);
 
         // compute the starting address of current tile in sA
         int smem_id = threadIdx.x;
         int smem_x = smem_id / tile_per_row;
         int smem_y = smem_id % tile_per_row;
         float *tile_ptr_to_shared = &sA[smem_x * TILE_DIM * TILE_DIM * tile_per_row + smem_y * TILE_DIM];
-        float *ptr_to_res = &res[origin_ptr_offset];
+        float *ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
 
         dct_tile(tile_ptr_to_shared, TILE_DIM, ptr_to_res, threadIdx.y, threadIdx.z);
         
@@ -87,29 +88,33 @@ __global__ void dct_gpu(float *A, float *res, int rows, int cols){
 
 int main() {
 
-    int N = 3;
+    int N = 6;
     float A[N * N], res[N * N];
     for (int i = 0; i < N * N; ++i) {
         A[i] = i;
     }
 
     dct_cpu(A, res, N);
-    print_matrix(res, N, N);
+    // print_matrix(res, N, N);
+    // writebin("./out/cpu_9.bin", res, sizeof(float) * N * N);
 
     float *dA, *dRes;
     cudaMallocManaged(&dA, sizeof(float) * N * N);
     cudaMallocManaged(&dRes, sizeof(float) * N * N);
     for (int i = 0; i < N * N; ++i) {
-        dA[i] = i;
+        dA[i] = A[i];
     }
 
     dim3 dimGrid = dim3(1, 1);
     dim3 dimBlock = dim3(1, 3, 3);
-    dct_gpu<<<dimGrid, dimBlock>>>(dA, dRes, N, N);
+    dct_gpu<<<dimGrid, dimBlock, 128 * sizeof(float)>>>(dA, dRes, N, N);
     cudaDeviceSynchronize();
 
-    print_matrix(dRes, N, N);
-    
+    std::cout << cudaGetErrorString(cudaGetLastError()) << std::endl;
+
+    // print_matrix(dRes, N, N);
+
+    writebin("./out/gpu_9.bin", dRes, sizeof(float) * N * N);
 
 }
 
