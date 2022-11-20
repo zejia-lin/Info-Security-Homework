@@ -7,7 +7,7 @@
 #define SQRT1 0.5773502691896257 // sqrt(1 / 3)
 #define SQRT2 0.816496580927726  // sqrt(2 / 3)
 
-
+// 𝐹(𝑢,𝑣)=𝑐(𝑢)𝑐(𝑣)∑𝑖=0𝑁−1∑𝑗=0𝑁−1𝑓(𝑖,𝑗)𝑐𝑜𝑠[(2𝑖+1)𝜋2𝑁𝑢]𝑐𝑜𝑠[(2𝑗+1)𝜋2𝑁𝑣]
 void dct_cpu(float *A, float *res, int N){
     float tmp, alpha_u, alpha_v;
     for(int u = 0; u < N; ++u){
@@ -51,6 +51,26 @@ void dct_cpu_tiled(const float *A, float *res, int N){
     }
 }
 
+void idct_cpu(float *A, float *res, int N){
+    float tmp, alpha_u, alpha_v;
+    for(int u = 0; u < N; ++u){
+        for(int v = 0; v < N; ++v){
+            tmp = 0;
+            for(int x = 0; x < N; ++x){
+                for(int y = 0; y < N; ++y){
+                    tmp += A[IDX(x, y, N)] * cos((2 * x + 1) * u * M_PI / (2 * N))  
+                                           * cos((2 * y + 1) * v * M_PI / (2 * N));
+                }
+            }
+            if(u == 0) alpha_u = sqrt(1. / N);
+            else alpha_u = sqrt(2. / N);
+            if(v == 0) alpha_v = sqrt(1. / N);
+            else alpha_v = sqrt(2. / N);
+            res[IDX(u, v, N)] = alpha_u * alpha_v * tmp;
+        }
+    }
+}
+
 
 __constant__ float COSINES[81] = {
     1.0, 0.8660254037844387, 0.5000000000000001, 6.123233995736766e-17, -0.4999999999999998, -0.8660254037844387, -1.0, -0.8660254037844388, -0.5000000000000004,
@@ -89,7 +109,6 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
     // shared memory size equals to blockDim
     extern __shared__ float sA[];
-    // extern __shared__ float sRes[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     int tile_per_row = rows / TILE_DIM;
@@ -112,13 +131,9 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
-        // float *elm_ptr_to_sRes = &sRes[threadIdx.x * TILE_DIM * TILE_DIM];
         float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
-        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, tile_ptr_to_shared[threadIdx.y * 9 + threadIdx.z]);
 
         dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
-        
-        // *elm_ptr_to_res = *elm_ptr_to_sRes;
     }
 
 }
@@ -166,12 +181,9 @@ int main(int argc, char **argv) {
         }
         std::cout << "GPU time " << double(compute_time) / 1000. << " ms\n";
     }
-
-
-
-    // print_matrix(dRes, N, N);
-
     writebin("./out/gpu_9.bin", dRes, sizeof(float) * N * N);
+
+    
 
 }
 
