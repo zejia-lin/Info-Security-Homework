@@ -1,8 +1,11 @@
 
+#pragma once
+
 #include <iostream>
 #include <sys/stat.h>
 #include <fstream>
 #include <chrono>
+
 
 #define IDX(i, j, ld) (((i) * (ld)) + (j))
 
@@ -24,28 +27,45 @@ using clock_type = chrono::high_resolution_clock;
 #define __TIMER_STOP__(_duration)
 #endif
 
-#define TILE_DIM 4
+// CUDA API error checking
+#define CUDA_CHECK(err)                                                                            \
+    do {                                                                                           \
+        cudaError_t err_ = (err);                                                                  \
+        if (err_ != cudaSuccess) {                                                                 \
+            printf("CUDA error %d at %s:%d\n", err_, __FILE__, __LINE__);                          \
+            throw std::runtime_error("CUDA error");                                                \
+        }                                                                                          \
+    } while (0)
 
-using DTYPE = float;
-using ACC_TYPE = double;
+// cusolver API error checking
+#define CUSOLVER_CHECK(err)                                                                        \
+    do {                                                                                           \
+        cusolverStatus_t err_ = (err);                                                             \
+        if (err_ != CUSOLVER_STATUS_SUCCESS) {                                                     \
+            printf("cusolver error %d at %s:%d\n", err_, __FILE__, __LINE__);                      \
+            throw std::runtime_error("cusolver error");                                            \
+        }                                                                                          \
+    } while (0)
 
-#define SQRT1 0.5 // sqrt(1 / 4)
-#define SQRT2 0.7071067811865475727373109293694142252206802368164062  // sqrt(2 / 4)
+// cublas API error checking
+#define CUBLAS_CHECK(err)                                                                          \
+    do {                                                                                           \
+        cublasStatus_t err_ = (err);                                                               \
+        if (err_ != CUBLAS_STATUS_SUCCESS) {                                                       \
+            printf("cublas error %d at %s:%d\n", err_, __FILE__, __LINE__);                        \
+            throw std::runtime_error("cublas error");                                              \
+        }                                                                                          \
+    } while (0)
 
-
-__constant__ ACC_TYPE COSINES[16] = {
-    1.0, 0.9238795325112867384831361050601117312908172607421875, 0.7071067811865475727373109293694142252206802368164062, 0.3826834323650898372903839117498137056827545166015625,
-    1.0, 0.3826834323650898372903839117498137056827545166015625, -0.7071067811865474617150084668537601828575134277343750, -0.9238795325112868495054385675757657736539840698242188,
-    1.0, -0.3826834323650897262680814492341596633195877075195312, -0.7071067811865476837596133918850682675838470458984375, 0.9238795325112865164385311800288036465644836425781250,
-    1.0, -0.9238795325112867384831361050601117312908172607421875, 0.7071067811865473506927060043381061404943466186523438, -0.3826834323650898928015351430076407268643379211425781
-};
-
-__constant__ ACC_TYPE ALPHAS[16] = {
-    SQRT1, SQRT2, SQRT2, SQRT2, 
-    SQRT2, SQRT2, SQRT2, SQRT2, 
-    SQRT2, SQRT2, SQRT2, SQRT2, 
-    SQRT2, SQRT2, SQRT2, SQRT2
-};
+// cublas API error checking
+#define CUSPARSE_CHECK(err)                                                                        \
+    do {                                                                                           \
+        cusparseStatus_t err_ = (err);                                                             \
+        if (err_ != CUSPARSE_STATUS_SUCCESS) {                                                     \
+            printf("cusparse error %d at %s:%d\n", err_, __FILE__, __LINE__);                      \
+            throw std::runtime_error("cusparse error");                                            \
+        }                                                                                          \
+    } while (0)
 
 
 

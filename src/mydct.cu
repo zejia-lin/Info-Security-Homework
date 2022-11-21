@@ -1,5 +1,8 @@
 
+#pragma once
+
 #include "myutils.cpp"
+#include "constants.h"
 
 void dct_cpu(float *A, float *res, int N){
     float tmp, alpha_u, alpha_v;
@@ -181,6 +184,8 @@ void idct_a100_best_param(int rows, int cols, const float *A, int lda, float *re
 }
 
 
+#ifdef TEST_DCT
+
 int main(int argc, char **argv) {
 
     uint64_t compute_time, prefetch_time;
@@ -249,5 +254,7 @@ int main(int argc, char **argv) {
     
 
 }
+
+#endif
 
 #undef TILE_DIM
