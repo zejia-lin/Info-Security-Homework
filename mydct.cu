@@ -103,13 +103,13 @@ __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, in
 /**
  * Should be launched with 3D block: (__, TILE_DIM, TILE_DIM) and 1D grid, shared mem size equals to blockDim
 */
-__global__ void dct_gpu(const float *A, float *res, int rows, int cols){
+__global__ void dct_gpu(int rows, int cols, const float *A, int lda, float *res, int ldres){
 
     // shared memory size equals to blockDim
     extern __shared__ float sA[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    int tile_per_row = rows / TILE_DIM;
+    int tile_per_row = cols / TILE_DIM;
     int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
     
     // grid stride loop
@@ -119,22 +119,21 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
         int tile_y = tile_id % tile_per_row;
-        int tile_offset_to_A = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
+        int tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
         // copy to shared memory
         sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
-                 tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
+                 tile_ptr_to_A[IDX(threadIdx.y, threadIdx.z, lda)]; // note that leading dimension is cols
         __syncthreads();
-        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z]);
 
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
-        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
+        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * ldres + threadIdx.z];
+        // printf("(%d, %d, %d): %d\n", tile_id, threadIdx.y, threadIdx.z, tile_offset_to_A + threadIdx.y * ldres + threadIdx.z);
 
         dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
     }
-
 }
 
 __device__ __forceinline__ void idct_tile(const float *A, int lda, float *res, int u, int v){
@@ -154,13 +153,13 @@ __device__ __forceinline__ void idct_tile(const float *A, int lda, float *res, i
 /**
  * Should be launched with 3D block: (__, TILE_DIM, TILE_DIM) and 1D grid, shared mem size equals to blockDim
 */
-__global__ void idct_gpu(const float *A, float *res, int rows, int cols){
+__global__ void idct_gpu(int rows, int cols, const float *A, int lda, float *res, int ldres){
 
     // shared memory size equals to blockDim
     extern __shared__ float sA[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    int tile_per_row = rows / TILE_DIM;
+    int tile_per_row = cols / TILE_DIM;
     int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
     
     // grid stride loop
@@ -170,20 +169,26 @@ __global__ void idct_gpu(const float *A, float *res, int rows, int cols){
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
         int tile_y = tile_id % tile_per_row;
-        int tile_offset_to_A = tile_x * TILE_DIM * TILE_DIM * tile_per_row + tile_y * TILE_DIM;
+        int tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
         // copy to shared memory
         sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
-                 tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
+                 tile_ptr_to_A[IDX(threadIdx.y, threadIdx.z, lda)]; // note that leading dimension is cols
         __syncthreads();
 
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
-        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * cols + threadIdx.z];
+        float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * ldres + threadIdx.z];
+        // printf("(%d, %d, %d): %d\n", tile_id, threadIdx.y, threadIdx.z, tile_offset_to_A + threadIdx.y * ldres + threadIdx.z);
 
         idct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
     }
+
+}
+
+
+void dct_a100_best_param(const float *A, float *res, int rows, int cols){
 
 }
 
@@ -204,11 +209,15 @@ int main(int argc, char **argv) {
     // writebin("./out/cpu_9.bin", res, sizeof(float) * N * N);
 
     float *dA, *dRes;
-    cudaMallocManaged(&dA, sizeof(float) * N * N);
-    cudaMallocManaged(&dRes, sizeof(float) * N * N);
-    for (size_t i = 0; i < N * N; ++i) {
-        dA[i] = i;
+    cudaMallocManaged(&dA, sizeof(float) * (N + 1) * N);
+    cudaMallocManaged(&dRes, sizeof(float) * (N + 1) * N);
+    for (size_t i = 0; i < N; ++i) {
+        for(size_t j = 0; j< N; ++j){
+            dA[IDX(i, j, N + 1)] = IDX(i, j, N);
+        }
     }
+
+    // print_matrix(dA, N, N + 1);
 
     __TIMER_START__
     cudaMemPrefetchAsync(dA, sizeof(float) * N * N, 0);
@@ -225,7 +234,7 @@ int main(int argc, char **argv) {
     // ====================================================================================================
     for(int _iter = 0; _iter < 1; ++_iter){
         __TIMER_START__
-        dct_gpu<<<dimGrid, dimBlock, smemSize>>>(dA, dRes, N, N);
+        dct_gpu<<<dimGrid, dimBlock, smemSize>>>(N, N, dA, N + 1, dRes, N + 1);
         cudaDeviceSynchronize();
         __TIMER_STOP__(compute_time);
         auto err = cudaGetLastError();
@@ -235,14 +244,14 @@ int main(int argc, char **argv) {
         std::cout << "DCT GPU time " << double(compute_time) / 1000. << " ms\n";
     }
 
-    writebin("./out/gpu_dct.bin", dRes, sizeof(float) * N * N);
+    writebin("./out/gpu_dct.bin", dRes, sizeof(float) * (N + 1) * N);
 
     // =====================================================================================================
     // ================================================IDCT================================================
     // =====================================================================================================
     for(int _iter = 0; _iter < 1; ++_iter){
         __TIMER_START__
-        idct_gpu<<<dimGrid, dimBlock, smemSize>>>(dRes, dA, N, N);
+        idct_gpu<<<dimGrid, dimBlock, smemSize>>>(N, N, dRes, N + 1, dA, N + 1);
         cudaDeviceSynchronize();
         __TIMER_STOP__(compute_time);
         auto err = cudaGetLastError();
@@ -251,7 +260,7 @@ int main(int argc, char **argv) {
         }
         std::cout << "IDCT GPU time " << double(compute_time) / 1000. << " ms\n";
     }
-    writebin("./out/gpu_idct.bin", dA, sizeof(float) * N * N);
+    writebin("./out/gpu_idct.bin", dA, sizeof(float) * (N + 1) * N);
 
     
 
