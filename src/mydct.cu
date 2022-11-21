@@ -1,5 +1,6 @@
 
 #pragma once
+// #define TEST_DCT
 
 #include "myutils.cpp"
 #include "constants.h"

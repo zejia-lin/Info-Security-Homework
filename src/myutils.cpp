@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <chrono>
+#include <vector>
 
 
 #define IDX(i, j, ld) (((i) * (ld)) + (j))
@@ -32,7 +33,7 @@ using clock_type = chrono::high_resolution_clock;
     do {                                                                                           \
         cudaError_t err_ = (err);                                                                  \
         if (err_ != cudaSuccess) {                                                                 \
-            printf("CUDA error %d at %s:%d\n", err_, __FILE__, __LINE__);                          \
+            printf("CUDA error %s at %s:%d\n", cudaGetErrorString(err_), __FILE__, __LINE__);      \
             throw std::runtime_error("CUDA error");                                                \
         }                                                                                          \
     } while (0)
@@ -70,25 +71,33 @@ using clock_type = chrono::high_resolution_clock;
 
 
 void print_matrix_colmaj(float *A, int rows, int cols, int lda){
+    printf("[");
     for(int i = 0; i < rows; ++i){
         printf("[");
         for(int j = 0; j < cols; ++j){
             printf("%.3f, ", A[IDX(j, i, lda)]);
         }
-        printf("]\n");
+        printf("]");
+        if(i != rows - 1){
+            printf(",\n");
+        }
     }
-    printf("\n");
+    printf("]\n\n");
 }
 
 void print_matrix_rowmaj(float *A, int rows, int cols, int lda){
+    printf("[");
     for(int i = 0; i < rows; ++i){
         printf("[");
         for(int j = 0; j < cols; ++j){
             printf("%.3f, ", A[IDX(i, j, lda)]);
         }
-        printf("]\n");
+        printf("]");
+        if(i != rows - 1){
+            printf(",\n");
+        }
     }
-    printf("\n");
+    printf("]\n\n");
 }
 
 void print_vector(float *A, int n){
@@ -96,6 +105,14 @@ void print_vector(float *A, int n){
         std::cout << A[i] << ", ";
     }
     std::cout << std::endl;
+}
+
+
+int myreadbin(const std::string &filepath, void *buffer){
+    std::ifstream fin(filepath, std::ios::binary);
+    std::vector<unsigned char> bb(std::istreambuf_iterator<char>(fin), {});
+    memcpy(buffer, bb.data(), sizeof(char) * bb.size());
+    return bb.size();
 }
 
 
@@ -137,7 +154,7 @@ char *readbin(const std::string &filePath, size_t *fileSize, void *buffer, size_
     *fileSize = size;
     file.close();
     std::cout << "Finish read file" << std::endl;
-    return static_cast<char *>(buffer);
+    return nullptr;
 }
 
 bool writebin(const std::string &filePath, const void *buffer, size_t size) {
