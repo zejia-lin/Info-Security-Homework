@@ -5,8 +5,6 @@
 #include <chrono>
 
 #define IDX(i, j, ld) (((i) * (ld)) + (j))
-#define RDX(i, j, ld) (((i) * (ld)) + (j))
-#define CDX(i, j, ld) ((i) + ((j) * (ld)))
 
 namespace chrono = std::chrono;
 using clock_type = chrono::high_resolution_clock;
@@ -32,7 +30,7 @@ void print_matrix_colmaj(float *A, int rows, int cols, int lda){
     for(int i = 0; i < rows; ++i){
         printf("[");
         for(int j = 0; j < cols; ++j){
-            printf("%.3f, ", A[CDX(i, j, lda)]);
+            printf("%.3f, ", A[IDX(j, i, lda)]);
         }
         printf("]\n");
     }
@@ -43,7 +41,7 @@ void print_matrix_rowmaj(float *A, int rows, int cols, int lda){
     for(int i = 0; i < rows; ++i){
         printf("[");
         for(int j = 0; j < cols; ++j){
-            printf("%.3f, ", A[RDX(i, j, lda)]);
+            printf("%.3f, ", A[IDX(i, j, lda)]);
         }
         printf("]\n");
     }

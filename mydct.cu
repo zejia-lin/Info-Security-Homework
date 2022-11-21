@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    print_matrix_rowmaj(dA, N + 1, N, N + 1);
+    // print_matrix_rowmaj(dA, N + 1, N, N + 1);
 
     __TIMER_START__
     cudaMemPrefetchAsync(dA, sizeof(float) * N * N, 0);
