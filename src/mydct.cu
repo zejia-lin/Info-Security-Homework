@@ -1,15 +1,6 @@
 
 #include "myutils.cpp"
 
-
-#define TILE_DIM 4
-
-using DTYPE = float;
-using ACC_TYPE = double;
-
-#define SQRT1 0.5 // sqrt(1 / 4)
-#define SQRT2 0.7071067811865475727373109293694142252206802368164062  // sqrt(2 / 4)
-
 void dct_cpu(float *A, float *res, int N){
     float tmp, alpha_u, alpha_v;
     for(int u = 0; u < N; ++u){
@@ -74,21 +65,6 @@ void idct_cpu(float *A, float *res, int N){
 }
 
 
-__constant__ ACC_TYPE COSINES[16] = {
-    1.0, 0.9238795325112867384831361050601117312908172607421875, 0.7071067811865475727373109293694142252206802368164062, 0.3826834323650898372903839117498137056827545166015625,
-    1.0, 0.3826834323650898372903839117498137056827545166015625, -0.7071067811865474617150084668537601828575134277343750, -0.9238795325112868495054385675757657736539840698242188,
-    1.0, -0.3826834323650897262680814492341596633195877075195312, -0.7071067811865476837596133918850682675838470458984375, 0.9238795325112865164385311800288036465644836425781250,
-    1.0, -0.9238795325112867384831361050601117312908172607421875, 0.7071067811865473506927060043381061404943466186523438, -0.3826834323650898928015351430076407268643379211425781
-};
-
-__constant__ ACC_TYPE ALPHAS[16] = {
-    SQRT1, SQRT2, SQRT2, SQRT2, 
-    SQRT2, SQRT2, SQRT2, SQRT2, 
-    SQRT2, SQRT2, SQRT2, SQRT2, 
-    SQRT2, SQRT2, SQRT2, SQRT2
-};
-
-
 __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, int u, int v){
     ACC_TYPE tmp = 0;
 #pragma unroll
@@ -119,8 +95,8 @@ __global__ void dct_gpu(int rows, int cols, const float *A, int lda, float *res,
     for(; tile_id < num_tiles; tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
-        int tile_x = tile_id / tile_per_row;
-        int tile_y = tile_id % tile_per_row;
+        int tile_x = tile_id % tile_per_row;
+        int tile_y = tile_id / tile_per_row;
         int tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
@@ -169,8 +145,8 @@ __global__ void idct_gpu(int rows, int cols, const float *A, int lda, float *res
     for(; tile_id < num_tiles; tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
-        int tile_x = tile_id / tile_per_row;
-        int tile_y = tile_id % tile_per_row;
+        int tile_x = tile_id % tile_per_row;
+        int tile_y = tile_id / tile_per_row;
         int tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
@@ -252,7 +228,7 @@ int main(int argc, char **argv) {
         std::cout << "DCT GPU time " << double(compute_time) / 1000. << " ms\n";
     }
 
-    writebin("./out/gpu_dct.bin", dRes, sizeof(float) * (N + 1) * N);
+    writebin("../out/gpu_dct.bin", dRes, sizeof(float) * (N + 1) * N);
 
     // =====================================================================================================
     // ================================================IDCT================================================
@@ -268,7 +244,7 @@ int main(int argc, char **argv) {
         }
         std::cout << "IDCT GPU time " << double(compute_time) / 1000. << " ms\n";
     }
-    writebin("./out/gpu_idct.bin", dA, sizeof(float) * (N + 1) * N);
+    writebin("../out/gpu_idct.bin", dA, sizeof(float) * (N + 1) * N);
 
     
 

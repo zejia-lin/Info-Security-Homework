@@ -22,12 +22,12 @@ ed_time = time.time()
 
 print("Finish CPU dct")
 
-subprocess.run(f"nvcc -O3 mydct.cu -o build/mydct".split()).check_returncode()
-subprocess.run(f"build/mydct {N}".split()).check_returncode()
+subprocess.run(f"nvcc -O3 mydct.cu -o ../build/mydct".split()).check_returncode()
+subprocess.run(f"../build/mydct {N}".split()).check_returncode()
 
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 
-gpu = np.fromfile('./out/gpu_dct.bin', dtype=np.float32).reshape(N, N + 1)[:N, :N]
+gpu = np.fromfile('../out/gpu_dct.bin', dtype=np.float32).reshape(N, N + 1)[:N, :N]
 
 # print('\nA\n', a)
 # print('\ncpu\n', cpu)
@@ -64,7 +64,7 @@ print("MSE: ", mean_squared_error(cpu_inv, a))
 print("SSIM: ", ssim(cpu_inv, a))
 
 print("======================================================")
-gpugpu_inv = np.fromfile('./out/gpu_idct.bin', dtype=np.float32).reshape(N, N + 1)[:N, :N]
+gpugpu_inv = np.fromfile('../out/gpu_idct.bin', dtype=np.float32).reshape(N, N + 1)[:N, :N]
 print("Finish GPU inv for GPU dct")
 print("MSE vs CPU: ", mean_squared_error(gpugpu_inv, gpu_inv))
 print("MSE vs Origin: ", mean_squared_error(gpugpu_inv, a))
