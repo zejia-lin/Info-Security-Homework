@@ -54,51 +54,59 @@ __global__ void trans_and_pack_continguous(size_t rows, size_t cols, float *A, s
     extern __shared__ float sA[];
 
     int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    int tile_per_row = cols / 3;
-    int num_tiles = (rows / 3) * (cols / 3); // TODO gaihuilai
+    int tile_per_row = cols / TILE_DIM;
+    int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
     
     // grid stride loop
 #pragma unroll
     for(; tile_id < num_tiles; tile_id += gridDim.x){
 
         // compute the starting address of current tile in A
-        int tile_x = tile_id % tile_per_row;
-        int tile_y = tile_id / tile_per_row;
-        int tile_offset_to_A = tile_x * 3 * lda + tile_y * 3;
+        int tile_x = tile_id / tile_per_row;
+        int tile_y = tile_id % tile_per_row;
+        int tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
         // copy to shared memory
-        sA[threadIdx.x * 3 * 3 + threadIdx.y + threadIdx.z * 3] = 
+        sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y + threadIdx.z * TILE_DIM] = 
                  tile_ptr_to_A[IDX(threadIdx.y, threadIdx.z, lda)]; // note that leading dimension is cols
         __syncthreads();
 
         // compute the starting address of current tile in sA
-        float *tile_ptr_to_shared = &sA[threadIdx.x * 3 * 3];
+        float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
         float *elm_ptr_to_res = &C[tile_offset_to_A + threadIdx.y * ldc + threadIdx.z];
 
-        *elm_ptr_to_res = tile_ptr_to_shared[threadIdx.y * 3 + threadIdx.z];
+        *elm_ptr_to_res = tile_ptr_to_shared[threadIdx.y * TILE_DIM + threadIdx.z];
     }
 }
 
 
-// int test_transpose(){
-//     int N = 6;
-//     float *dA, *dRes;
-//     cudaMallocManaged(&dA, sizeof(float) * (N + 1) * N);
-//     cudaMallocManaged(&dRes, sizeof(float) * (N + 1) * N);
-//     for (size_t i = 0; i < N; ++i) {
-//         for(size_t j = 0; j < N; ++j){
-//             dA[i + j * (N + 1)] = i + j * N;
-//         }
-//     }
-//     print_matrix_rowmaj(dA, N, N + 1, N + 1);
-//     dim3 dimGrid(2);
-//     dim3 dimgBlock(3, 3, 3);
-//     size_t smemSize = 9 * sizeof(int);
-//     trans_and_pack_continguous<<<dimGrid, dimgBlock, smemSize>>>(N, N, dA, N + 1, dRes, N + 1);
-//     cudaDeviceSynchronize();
-//     print_matrix_rowmaj(dRes, N + 1, N, N + 1);
-// }
+int main(){
+    int N = 8;
+    float *dA, *dRes;
+    cudaMallocManaged(&dA, sizeof(float) * (N + 1) * N);
+    cudaMallocManaged(&dRes, sizeof(float) * (N + 1) * N);
+    for (size_t i = 0; i < N; ++i) {
+        for(size_t j = 0; j < N; ++j){
+            dA[i + j * (N + 1)] = i + j * N;
+        }
+    }
+    print_matrix_rowmaj(dA, N, N + 1, N + 1);
+    cudaMemPrefetchAsync(dA, sizeof(float) * (N + 1) * N, 0);
+    cudaMemPrefetchAsync(dRes, sizeof(float) * (N + 1) * N, 0);
+    cudaDeviceSynchronize();
+    dim3 dimGrid(1024);
+    dim3 dimgBlock(8, TILE_DIM, TILE_DIM);
+    size_t smemSize = TILE_DIM * TILE_DIM * sizeof(int);
+    for(int _iter = 0; _iter < 1; ++_iter){
+        __TIMER_START__(duration)
+        trans_and_pack_continguous<<<dimGrid, dimgBlock, smemSize>>>(N, N, dA, N + 1, dRes, N + 1);
+        cudaDeviceSynchronize();
+        __TIMER_STOP__(duration);
+        std::cout << "Transpose in "<< duration / 1000 << " ms\n";
+    }
+    print_matrix_rowmaj(dRes, N + 1, N, N + 1);
+}
 
 
 

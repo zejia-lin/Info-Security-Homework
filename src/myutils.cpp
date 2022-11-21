@@ -16,12 +16,12 @@ using clock_type = chrono::high_resolution_clock;
 #define ENABLE_TIMER
 
 #ifdef ENABLE_TIMER
-#define __TIMER_START__ { \
+#define __TIMER_START__(_ms) double _ms; { \
     auto _start_timer = clock_type::now();
 
-#define __TIMER_STOP__(_duration) \
+#define __TIMER_STOP__(_ms) \
     auto _end_timer = clock_type::now(); \
-    _duration = chrono::duration_cast<chrono::microseconds>(_end_timer - _start_timer).count(); \
+    _ms = chrono::duration_cast<chrono::microseconds>(_end_timer - _start_timer).count() / 1000.; \
 }
 #else
 #define __TIMER_START__
