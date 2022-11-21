@@ -48,7 +48,7 @@ void tiled_add_wm(size_t rows, size_t cols, float *A, size_t lda, float *res, si
 }
 
 
-__global__ void trans_and_pack_continguous(size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc){
+__global__ void gpu_trans_and_pack_continguous(size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc){
 
     // shared memory size equals to blockDim
     extern __shared__ float sA[];
@@ -81,6 +81,14 @@ __global__ void trans_and_pack_continguous(size_t rows, size_t cols, float *A, s
 }
 
 
+int t_and_p_a100_best_param(size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc, cudaStream_t stream=0){
+    dim3 dimGrid(1024);
+    dim3 dimgBlock(8, TILE_DIM, TILE_DIM);
+    size_t smemSize = TILE_DIM * TILE_DIM * sizeof(int);
+    gpu_trans_and_pack_continguous<<<dimGrid, dimgBlock, smemSize, stream>>>(rows, cols, A, lda, C, ldc);
+}
+
+
 int main(){
     int N = 8;
     float *dA, *dRes;
@@ -95,19 +103,10 @@ int main(){
     cudaMemPrefetchAsync(dA, sizeof(float) * (N + 1) * N, 0);
     cudaMemPrefetchAsync(dRes, sizeof(float) * (N + 1) * N, 0);
     cudaDeviceSynchronize();
-    dim3 dimGrid(1024);
-    dim3 dimgBlock(8, TILE_DIM, TILE_DIM);
-    size_t smemSize = TILE_DIM * TILE_DIM * sizeof(int);
-    for(int _iter = 0; _iter < 1; ++_iter){
-        __TIMER_START__(duration)
-        trans_and_pack_continguous<<<dimGrid, dimgBlock, smemSize>>>(N, N, dA, N + 1, dRes, N + 1);
-        cudaDeviceSynchronize();
-        __TIMER_STOP__(duration);
-        std::cout << "Transpose in "<< duration / 1000 << " ms\n";
-    }
+    t_and_p_a100_best_param(N, N, dA, N + 1, dRes, N + 1);
+    cudaDeviceSynchronize();
     print_matrix_rowmaj(dRes, N + 1, N, N + 1);
 }
-
 
 
 int maind(int argc, char **argv){
