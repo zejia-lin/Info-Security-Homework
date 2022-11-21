@@ -4,10 +4,12 @@
 
 #define TILE_DIM 4
 
+#define DTYPE float
+#define ACC_TYPE double
+
 #define SQRT1 0.5 // sqrt(1 / 4)
 #define SQRT2 0.7071067811865476  // sqrt(2 / 4)
 
-// 𝐹(𝑢,𝑣)=𝑐(𝑢)𝑐(𝑣)∑𝑖=0𝑁−1∑𝑗=0𝑁−1𝑓(𝑖,𝑗)𝑐𝑜𝑠[(2𝑖+1)𝜋2𝑁𝑢]𝑐𝑜𝑠[(2𝑗+1)𝜋2𝑁𝑣]
 void dct_cpu(float *A, float *res, int N){
     float tmp, alpha_u, alpha_v;
     for(int u = 0; u < N; ++u){
@@ -188,8 +190,18 @@ __global__ void idct_gpu(int rows, int cols, const float *A, int lda, float *res
 }
 
 
-void dct_a100_best_param(const float *A, float *res, int rows, int cols){
+void dct_a100_best_param(int rows, int cols, const float *A, int lda, float *res, int ldres, cudaStream_t stream=0){
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
+    dct_gpu<<<dimGrid, dimBlock, smemSize, stream>>>(rows, cols, A, lda, res, ldres);
+}
 
+void idct_a100_best_param(int rows, int cols, const float *A, int lda, float *res, int ldres, cudaStream_t stream=0){
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
+    idct_gpu<<<dimGrid, dimBlock, smemSize, stream>>>(rows, cols, A, lda, res, ldres);
 }
 
 
@@ -224,17 +236,13 @@ int main(int argc, char **argv) {
     cudaDeviceSynchronize();
     __TIMER_STOP__(prefetch_time)
     std::cout << "Prefetch in "<< prefetch_time / 1000 << " ms\n";
-
-    dim3 dimGrid = dim3(512);
-    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
-    size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
-
+    
     // ====================================================================================================
     // ================================================DCT================================================
     // ====================================================================================================
     for(int _iter = 0; _iter < 1; ++_iter){
         __TIMER_START__
-        dct_gpu<<<dimGrid, dimBlock, smemSize>>>(N, N, dA, N + 1, dRes, N + 1);
+        dct_a100_best_param(N, N, dA, N + 1, dRes, N + 1);
         cudaDeviceSynchronize();
         __TIMER_STOP__(compute_time);
         auto err = cudaGetLastError();
@@ -251,7 +259,7 @@ int main(int argc, char **argv) {
     // =====================================================================================================
     for(int _iter = 0; _iter < 1; ++_iter){
         __TIMER_START__
-        idct_gpu<<<dimGrid, dimBlock, smemSize>>>(N, N, dRes, N + 1, dA, N + 1);
+        idct_a100_best_param(N, N, dRes, N + 1, dA, N + 1);
         cudaDeviceSynchronize();
         __TIMER_STOP__(compute_time);
         auto err = cudaGetLastError();
