@@ -8,15 +8,16 @@ from skimage.metrics import mean_squared_error
 
 np.set_printoptions(3, suppress=True)
 
-N = 2562
+N = 4800
+TILE = 4
 
 a = np.array(range(N * N)).reshape(N, N).astype(np.float32)
 cpu = np.zeros_like(a)
 
 st_time = time.time()
-for i in range(N // 3):
-    for j in range(N // 3):
-        cpu[i*3:i*3+3, j*3:j*3+3] = cv2.dct(a[i*3:i*3+3, j*3:j*3+3])
+for i in range(N // TILE):
+    for j in range(N // TILE):
+        cpu[i*TILE:i*TILE+TILE, j*TILE:j*TILE+TILE] = cv2.dct(a[i*TILE:i*TILE+TILE, j*TILE:j*TILE+TILE])
 ed_time = time.time()
 
 print("Finish CPU dct")
@@ -33,14 +34,14 @@ gpu = np.fromfile('./out/gpu_dct.bin', dtype=np.float32).reshape(N, N)
 # print('\ngpu\n', gpu)
 
 print("MSE: ", mean_squared_error(gpu, cpu))
-# print("SSIM: ", ssim(gpu, cpu))
+print("SSIM: ", ssim(gpu, cpu))
 # print(pd.DataFrame(np.sqrt((gpu - cpu) ** 2).flatten()).describe())
 
 
 def blocked_idct(A, res):
-    for i in range(N // 3):
-        for j in range(N // 3):
-            res[i*3:i*3+3, j*3:j*3+3] = cv2.idct(A[i*3:i*3+3, j*3:j*3+3])
+    for i in range(N // TILE):
+        for j in range(N // TILE):
+            res[i*TILE:i*TILE+TILE, j*TILE:j*TILE+TILE] = cv2.idct(A[i*TILE:i*TILE+TILE, j*TILE:j*TILE+TILE])
 
 print("======================================================")
 gpu_inv = np.zeros_like(gpu)
@@ -50,7 +51,7 @@ ed_time = time.time()
 print("Finish CPU inv for GPU dct")
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 print("MSE: ", mean_squared_error(gpu_inv, a))
-# print("SSIM: ", ssim(gpu_inv, a))
+print("SSIM: ", ssim(gpu_inv, a))
 
 print("======================================================")
 cpu_inv = np.zeros_like(gpu)
@@ -60,14 +61,15 @@ ed_time = time.time()
 print("Finish CPU inv for CPU dct")
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 print("MSE: ", mean_squared_error(cpu_inv, a))
-# print("SSIM: ", ssim(cpu_inv, a))
+print("SSIM: ", ssim(cpu_inv, a))
 
 print("======================================================")
 gpugpu_inv = np.fromfile('./out/gpu_idct.bin', dtype=np.float32).reshape(N, N)
 print("Finish GPU inv for GPU dct")
-print("MSE: ", mean_squared_error(gpugpu_inv, a))
+print("MSE: ", mean_squared_error(gpugpu_inv, gpu_inv))
+print("SSIM: ", ssim(gpugpu_inv, gpu_inv))
 
-print(gpugpu_inv)
+# print(gpugpu_inv)
 
 
 # print(pd.DataFrame(np.sqrt((gpu_inv - a) ** 2).flatten()).describe())

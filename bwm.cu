@@ -1,4 +1,8 @@
+
 #include <cuda_runtime.h>
+#include <cublas.h>
+#include <cusolverDn.h>
+
 #include <iostream>
 #include "svd_3x3.cu"
 

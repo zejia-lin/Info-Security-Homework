@@ -2,10 +2,10 @@
 #include "myutils.cpp"
 
 
-#define TILE_DIM 3
+#define TILE_DIM 4
 
-#define SQRT1 0.5773502691896257 // sqrt(1 / 3)
-#define SQRT2 0.816496580927726  // sqrt(2 / 3)
+#define SQRT1 0.5 // sqrt(1 / 4)
+#define SQRT2 0.7071067811865476  // sqrt(2 / 4)
 
 // 𝐹(𝑢,𝑣)=𝑐(𝑢)𝑐(𝑣)∑𝑖=0𝑁−1∑𝑗=0𝑁−1𝑓(𝑖,𝑗)𝑐𝑜𝑠[(2𝑖+1)𝜋2𝑁𝑢]𝑐𝑜𝑠[(2𝑗+1)𝜋2𝑁𝑣]
 void dct_cpu(float *A, float *res, int N){
@@ -72,20 +72,18 @@ void idct_cpu(float *A, float *res, int N){
 }
 
 
-__constant__ float COSINES[81] = {
-    1.0, 0.8660254037844387, 0.5000000000000001, 6.123233995736766e-17, -0.4999999999999998, -0.8660254037844387, -1.0, -0.8660254037844388, -0.5000000000000004,
-    1.0, 6.123233995736766e-17, -1.0, -1.8369701987210297e-16, 1.0, 1.1943401194869635e-15, -1.0, -4.286263797015736e-16, 1.0,
-    1.0, -0.8660254037844387, 0.5000000000000001, 1.1943401194869635e-15, -0.49999999999999983, 0.8660254037844383, -1.0, 0.8660254037844386, -0.5000000000000003,
-    1.0, -0.8660254037844388, 0.5000000000000006, -4.286263797015736e-16, -0.499999999999999, 0.8660254037844386, -1.0, 0.8660254037844395, -0.500000000000002,
-    1.0, -1.8369701987210297e-16, -1.0, 5.51091059616309e-16, 1.0, 8.578717400397356e-16, -1.0, -4.904777002955296e-16, 1.0,
-    1.0, 0.8660254037844384, 0.4999999999999991, 1.1028010998692062e-15, -0.5000000000000018, -0.8660254037844377, -1.0, -0.8660254037844382, -0.4999999999999964,
-    1.0, 0.8660254037844386, 0.49999999999999994, 2.57237725884603e-15, -0.5000000000000001, -0.8660254037844383, -1.0, -0.8660254037844398, -0.4999999999999998,
-    1.0, 1.1943401194869635e-15, -1.0, 8.578717400397356e-16, 1.0, -2.45548340466059e-16, -1.0, 3.185938619692883e-15, 1.0,
-    1.0, -0.8660254037844388, 0.5000000000000004, 2.8173066186755008e-15, -0.49999999999999917, 0.866025403784438, -1.0, 0.8660254037844359, -0.5000000000000017
+__constant__ float COSINES[16] = {
+    1.0, 0.9238795325112867, 0.7071067811865476, 0.38268343236508984,
+    1.0, 0.38268343236508984, -0.7071067811865475, -0.9238795325112868,
+    1.0, -0.3826834323650897, -0.7071067811865477, 0.9238795325112865,
+    1.0, -0.9238795325112867, 0.7071067811865474, -0.3826834323650899
 };
 
-__constant__ float ALPHAS[9] = {
-    SQRT1, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2, SQRT2
+__constant__ float ALPHAS[16] = {
+    SQRT1, SQRT2, SQRT2, SQRT2, 
+    SQRT2, SQRT2, SQRT2, SQRT2, 
+    SQRT2, SQRT2, SQRT2, SQRT2, 
+    SQRT2, SQRT2, SQRT2, SQRT2
 };
 
 
@@ -95,7 +93,7 @@ __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, in
     for(int x = 0; x < TILE_DIM; ++x){
 #pragma unroll
         for(int y = 0; y < TILE_DIM; ++y){
-            tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, TILE_DIM * TILE_DIM)] * COSINES[IDX(y, v, TILE_DIM * TILE_DIM)];
+            tmp += A[IDX(x, y, lda)] * COSINES[IDX(x, u, TILE_DIM)] * COSINES[IDX(y, v, TILE_DIM)];
         }
     }
     *res = ALPHAS[u] * ALPHAS[v] * tmp;
@@ -103,7 +101,7 @@ __device__ __forceinline__ void dct_tile(const float *A, int lda, float *res, in
 
 
 /**
- * Should be launched with 3D block: (__, 3, 3) and 1D grid, shared mem size equals to blockDim
+ * Should be launched with 3D block: (__, TILE_DIM, TILE_DIM) and 1D grid, shared mem size equals to blockDim
 */
 __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
 
@@ -128,6 +126,7 @@ __global__ void dct_gpu(const float *A, float *res, int rows, int cols){
         sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
                  tile_ptr_to_A[threadIdx.y * cols + threadIdx.z]; // note that leading dimension is cols
         __syncthreads();
+        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z]);
 
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
@@ -144,7 +143,8 @@ __device__ __forceinline__ void idct_tile(const float *A, int lda, float *res, i
     for(int x = 0; x < TILE_DIM; ++x){
 #pragma unroll
         for(int y = 0; y < TILE_DIM; ++y){
-            tmp += ALPHAS[x] * ALPHAS[y] * A[IDX(x, y, lda)] * COSINES[IDX(u, x, TILE_DIM * TILE_DIM)] * COSINES[IDX(v, y, TILE_DIM * TILE_DIM)];
+            tmp += ALPHAS[x] * ALPHAS[y] * A[IDX(x, y, lda)] 
+                             * COSINES[IDX(u, x, TILE_DIM)] * COSINES[IDX(v, y, TILE_DIM)];
         }
     }
     *res = tmp;
@@ -152,7 +152,7 @@ __device__ __forceinline__ void idct_tile(const float *A, int lda, float *res, i
 
 
 /**
- * Should be launched with 3D block: (__, 3, 3) and 1D grid, shared mem size equals to blockDim
+ * Should be launched with 3D block: (__, TILE_DIM, TILE_DIM) and 1D grid, shared mem size equals to blockDim
 */
 __global__ void idct_gpu(const float *A, float *res, int rows, int cols){
 
@@ -190,7 +190,7 @@ __global__ void idct_gpu(const float *A, float *res, int rows, int cols){
 
 int main(int argc, char **argv) {
 
-    uint64_t compute_time;
+    uint64_t compute_time, prefetch_time;
     size_t N = atoll(argv[1]);
     // float A[N * N];//, res[N * N];
     // for (size_t i = 0; i < N * N; ++i) {
@@ -210,8 +210,11 @@ int main(int argc, char **argv) {
         dA[i] = i;
     }
 
-    cudaMemcpy(dA, dA, sizeof(float) * N * N, cudaMemcpyDefault);
+    __TIMER_START__
+    cudaMemPrefetchAsync(dA, sizeof(float) * N * N, 0);
     cudaDeviceSynchronize();
+    __TIMER_STOP__(prefetch_time)
+    std::cout << "Prefetch in "<< prefetch_time / 1000 << " ms\n";
 
     dim3 dimGrid = dim3(512);
     dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
@@ -231,6 +234,7 @@ int main(int argc, char **argv) {
         }
         std::cout << "DCT GPU time " << double(compute_time) / 1000. << " ms\n";
     }
+
     writebin("./out/gpu_dct.bin", dRes, sizeof(float) * N * N);
 
     // =====================================================================================================
