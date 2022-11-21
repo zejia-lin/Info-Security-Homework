@@ -8,10 +8,10 @@ from skimage.metrics import mean_squared_error
 
 np.set_printoptions(3, suppress=True)
 
-N = 2400
+N = 4
 TILE = 4
 
-a = np.array(range(N * N)).reshape(N, N).astype(np.float32)
+a = np.array(range(N * N)).reshape(N, N).astype(np.float32).T
 cpu = np.zeros_like(a)
 
 st_time = time.time()
@@ -29,9 +29,9 @@ print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 
 gpu = np.fromfile('./out/gpu_dct.bin', dtype=np.float32).reshape(N, N + 1)[:N, :N]
 
-# print('\nA\n', a)
-# print('\ncpu\n', cpu)
-# print('\ngpu\n', gpu)
+print('\nA\n', a)
+print('\ncpu\n', cpu)
+print('\ngpu\n', gpu)
 
 print("MSE: ", mean_squared_error(gpu, cpu))
 print("SSIM: ", ssim(gpu, cpu))

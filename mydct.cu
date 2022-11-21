@@ -224,12 +224,12 @@ int main(int argc, char **argv) {
     cudaMallocManaged(&dA, sizeof(float) * (N + 1) * N);
     cudaMallocManaged(&dRes, sizeof(float) * (N + 1) * N);
     for (size_t i = 0; i < N; ++i) {
-        for(size_t j = 0; j< N; ++j){
-            dA[IDX(i, j, N + 1)] = IDX(i, j, N);
+        for(size_t j = 0; j < N; ++j){
+            dA[i + j * (N + 1)] = i * N + j;
         }
     }
 
-    // print_matrix(dA, N, N + 1);
+    print_matrix_rowmaj(dA, N + 1, N, N + 1);
 
     __TIMER_START__
     cudaMemPrefetchAsync(dA, sizeof(float) * N * N, 0);

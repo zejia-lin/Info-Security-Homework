@@ -4,9 +4,9 @@
 #include <fstream>
 #include <chrono>
 
-#ifndef IDX
-#define IDX(i, j, ld) (((i) * (ld)) + j)
-#endif
+#define IDX(i, j, ld) (((i) * (ld)) + (j))
+#define RDX(i, j, ld) (((i) * (ld)) + (j))
+#define CDX(i, j, ld) ((i) + ((j) * (ld)))
 
 namespace chrono = std::chrono;
 using clock_type = chrono::high_resolution_clock;
@@ -28,13 +28,26 @@ using clock_type = chrono::high_resolution_clock;
 
 
 
-void print_matrix(float *A, int rows, int cols){
+void print_matrix_colmaj(float *A, int rows, int cols, int lda){
     for(int i = 0; i < rows; ++i){
+        printf("[");
         for(int j = 0; j < cols; ++j){
-            printf("%.3f, ", A[IDX(i, j, cols)]);
+            printf("%.3f, ", A[CDX(i, j, lda)]);
         }
-        std::cout << std::endl;
+        printf("]\n");
     }
+    printf("\n");
+}
+
+void print_matrix_rowmaj(float *A, int rows, int cols, int lda){
+    for(int i = 0; i < rows; ++i){
+        printf("[");
+        for(int j = 0; j < cols; ++j){
+            printf("%.3f, ", A[RDX(i, j, lda)]);
+        }
+        printf("]\n");
+    }
+    printf("\n");
 }
 
 void print_vector(float *A, int n){
