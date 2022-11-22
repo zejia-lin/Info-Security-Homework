@@ -171,6 +171,8 @@ int main(int argc, char **argv){
     CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
     CUSOLVER_CHECK(cusolverDnSetStream(solverHandle, stream));
     CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(&gesvdParams));
+    // CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdParams, 1e-10));
+    // CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(gesvdParams, 1000));
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
 
@@ -198,14 +200,18 @@ int main(int argc, char **argv){
                 work, lwork, info, gesvdParams, batchSize));
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    mtxtp_a100_best_param(false, rows, cols, A, lda, pyU, lda, stream);
+    mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
     mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
     cudaDeviceSynchronize();
 
-    print_matrix_colmaj(pyU, 4, 4, 4);
+    // print_matrix_rowmaj(pyU, 4, 4, 4);
+    // print_matrix_rowmaj(pyV, 4, 4, 4);
+    // print_matrix_rowmaj(S, 1, 4, 4);
 
-    writebin("../out/U.bin", U, sizeof(float) * rows * cols);
-    writebin("../out/V.bin", V, sizeof(float) * rows * cols);
+    // cublasGemmBatchedEx(blasHandle, CUBLAS_OP_N,)
+
+    writebin("../out/U.bin", pyU, sizeof(float) * rows * cols);
+    writebin("../out/V.bin", pyV, sizeof(float) * rows * cols);
     writebin("../out/S.bin", S, sizeof(float) * batchSize * TILE_DIM);
 
     // print_matrix_colmaj(A, rows, cols, lda);
