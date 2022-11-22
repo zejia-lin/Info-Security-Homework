@@ -22,13 +22,15 @@ def tiled_svd(A, U, S, VT):
 
 
 np.random.seed(42)
-A = np.random.rand(rows, cols).astype(np.float32)
+A = np.array(range(rows * cols)).reshape(rows, cols).astype(np.float32)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
-cpu_S = np.zeros_like(A[0])
+cpu_S = np.zeros(rows * cols // TILE)
 A.tofile('../out/A.bin')
 
-subprocess.run("sh ../script/bwm.sh".split()).check_returncode()
+print(A)
+
+subprocess.run("sh ../script/bwm.sh bwm.cu".split()).check_returncode()
 subprocess.run(f"../build/bwm {rows}".split())
 
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
@@ -46,6 +48,8 @@ print(gpu_S, end='\n\n')
 
 gpu_inv = gpu_U @ np.diag(gpu_S) @ gpu_VT
 cpu_inv = cpu_U @ np.diag(cpu_S) @ cpu_VT
+
+print(gpu_inv)
 
 print(f"GPU vs CPU: {mean_squared_error(gpu_inv, cpu_inv)}")
 print(f"GPU vs Origin: {mean_squared_error(gpu_inv, A)}")

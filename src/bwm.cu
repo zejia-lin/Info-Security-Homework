@@ -64,52 +64,64 @@ __global__ void gpu_trans_and_pack_continguous(size_t rows, size_t cols, float *
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
         int tile_y = tile_id % tile_per_row;
-        int tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
-        const float *tile_ptr_to_A = &A[tile_offset_to_A];
+        const float *tile_ptr_to_A = &A[tile_x * TILE_DIM * lda + tile_y * TILE_DIM];
+        float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
+        float *tile_ptr_to_res = &C[tile_id * TILE_DIM * TILE_DIM];
         
         // copy to shared memory
-        sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y + threadIdx.z * TILE_DIM] = 
+        tile_ptr_to_shared[threadIdx.y + threadIdx.z * TILE_DIM] = 
                  tile_ptr_to_A[IDX(threadIdx.y, threadIdx.z, lda)]; // note that leading dimension is cols
         __syncthreads();
 
-        // compute the starting address of current tile in sA
-        float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
-        float *elm_ptr_to_res = &C[tile_offset_to_A + threadIdx.y * ldc + threadIdx.z];
+        tile_ptr_to_res[threadIdx.y * TILE_DIM + threadIdx.z] = tile_ptr_to_shared[threadIdx.y * TILE_DIM + threadIdx.z];
+    }
+}
 
-        *elm_ptr_to_res = tile_ptr_to_shared[threadIdx.y * TILE_DIM + threadIdx.z];
+__global__ void gpu_unpack_and_trans(size_t rows, size_t cols, const float *A, size_t lda, float *C, size_t ldc){
+    // shared memory size equals to blockDim
+    extern __shared__ float sA[];
+
+    int tile_id = threadIdx.x + blockIdx.x * blockDim.x;
+    int tile_per_row = cols / TILE_DIM;
+    int num_tiles = (rows / TILE_DIM) * (cols / TILE_DIM);
+    
+    // grid stride loop
+#pragma unroll
+    for(; tile_id < num_tiles; tile_id += gridDim.x){
+
+        // compute the starting address of current tile in A
+        int tile_x = tile_id / tile_per_row;
+        int tile_y = tile_id % tile_per_row;
+        float *tile_ptr_to_A = &C[tile_x * TILE_DIM * lda + tile_y * TILE_DIM];
+        float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
+        const float *tile_ptr_to_res = &A[tile_id * TILE_DIM * TILE_DIM];
+        
+        tile_ptr_to_shared[threadIdx.y * TILE_DIM + threadIdx.z] = tile_ptr_to_res[threadIdx.y * TILE_DIM + threadIdx.z];
+        // copy to shared memory
+        tile_ptr_to_A[IDX(threadIdx.y, threadIdx.z, lda)] = tile_ptr_to_shared[threadIdx.y + threadIdx.z * TILE_DIM];
+        __syncthreads();
+
+        // printf("(%d, %d, %d): %d\n", tile_id, threadIdx.y, threadIdx.z, tile_x * TILE_DIM * lda + tile_y * TILE_DIM);
+
     }
 }
 
 
-int t_and_p_a100_best_param(size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc, cudaStream_t stream=0){
+int mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc, cudaStream_t stream=0){
     dim3 dimGrid(1024);
     dim3 dimgBlock(8, TILE_DIM, TILE_DIM);
     size_t smemSize = TILE_DIM * TILE_DIM * sizeof(int);
-    gpu_trans_and_pack_continguous<<<dimGrid, dimgBlock, smemSize, stream>>>(rows, cols, A, lda, C, ldc);
-}
-
-
-int main(){
-    int N = 8;
-    float *dA, *dRes;
-    cudaMallocManaged(&dA, sizeof(float) * (N + 1) * N);
-    cudaMallocManaged(&dRes, sizeof(float) * (N + 1) * N);
-    for (size_t i = 0; i < N; ++i) {
-        for(size_t j = 0; j < N; ++j){
-            dA[i + j * (N + 1)] = i + j * N;
-        }
+    __TIMER_START__(dur);
+    if (input) {
+        gpu_trans_and_pack_continguous<<<dimGrid, dimgBlock, smemSize, stream>>>(rows, cols, A, lda, C, ldc);
+    } else {
+        gpu_unpack_and_trans<<<dimGrid, dimgBlock, smemSize, stream>>>(rows, cols, A, lda, C, ldc);
     }
-    print_matrix_rowmaj(dA, N, N + 1, N + 1);
-    cudaMemPrefetchAsync(dA, sizeof(float) * (N + 1) * N, 0);
-    cudaMemPrefetchAsync(dRes, sizeof(float) * (N + 1) * N, 0);
-    cudaDeviceSynchronize();
-    t_and_p_a100_best_param(N, N, dA, N + 1, dRes, N + 1);
-    cudaDeviceSynchronize();
-    print_matrix_rowmaj(dRes, N + 1, N, N + 1);
+    __TIMER_STOP__(dur);
+    std::cout << "Trans: " << dur << std::endl;
 }
 
-
-int maind(int argc, char **argv){
+int main(int argc, char **argv){
 
     int device = 0;
     cudaDeviceProp prop;
@@ -122,6 +134,7 @@ int maind(int argc, char **argv){
     int cols = N;
 
     float *A, *AT, *U, *S, *V;
+    float *pyU, *pyS, *pyV;
     int *info;
     int lda = N;
     int ldu = N;
@@ -139,15 +152,20 @@ int maind(int argc, char **argv){
     CUDA_CHECK(cudaMallocManaged(&AT, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&A, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&U, sizeof(float) * rows * cols));
+    CUDA_CHECK(cudaMallocManaged(&pyU, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&V, sizeof(float) * rows * cols));
+    CUDA_CHECK(cudaMallocManaged(&pyV, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * batchSize * TILE_DIM));
 
     int bb = myreadbin("../out/A.bin", AT);
 
+    CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * batchSize, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(AT, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(A, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(U, sizeof(float) * rows * cols, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(pyU, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(V, sizeof(float) * rows * cols, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(pyV, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(S, sizeof(float) * N, device, stream));
 
     CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
@@ -156,22 +174,35 @@ int maind(int argc, char **argv){
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
 
-    const float one = 1, zero = 0;
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda, &zero, A, lda, A, lda));
+    mtxtp_a100_best_param(true, rows, cols, AT, lda, A, lda, stream);
+    cudaDeviceSynchronize();
+
+    for(int i = 0; i < rows * cols; ++i){
+        std::cout << A[i] << ", ";
+        if((i + 1) % cols == 0){
+            std::cout << "\n";
+        }
+    }
     
 
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
                                  CUSOLVER_EIG_MODE_VECTOR,
                                  TILE_DIM, TILE_DIM, 
-                                 A, lda, S, U, ldu, V, ldv,
+                                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
                                  &lwork, gesvdParams, batchSize));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&work), sizeof(float) * lwork));
 
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
                 TILE_DIM, TILE_DIM, 
-                A, lda, S, U, ldu, V, ldv,
+                A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
                 work, lwork, info, gesvdParams, batchSize));
     CUDA_CHECK(cudaDeviceSynchronize());
+
+    mtxtp_a100_best_param(false, rows, cols, A, lda, pyU, lda, stream);
+    mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
+    cudaDeviceSynchronize();
+
+    print_matrix_colmaj(pyU, 4, 4, 4);
 
     writebin("../out/U.bin", U, sizeof(float) * rows * cols);
     writebin("../out/V.bin", V, sizeof(float) * rows * cols);
