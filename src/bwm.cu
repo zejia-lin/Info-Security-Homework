@@ -146,7 +146,8 @@ int main(int argc, char **argv){
     gesvdjInfo_t gesvdParams;
     int lwork;
     float *work;
-    int batchSize = (rows / TILE_DIM) * (cols / TILE_DIM);
+    int batchSize = 2;
+    int numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
     CUDA_CHECK(cudaMallocManaged(&AT, sizeof(float) * rows * cols));
@@ -155,7 +156,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMallocManaged(&pyU, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&V, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&pyV, sizeof(float) * rows * cols));
-    CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * batchSize * TILE_DIM));
+    CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * numTiles * TILE_DIM));
 
     int bb = myreadbin("../out/A.bin", AT);
 
@@ -166,7 +167,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMemPrefetchAsync(pyU, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(V, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(pyV, sizeof(float) * rows * cols, device, stream));
-    CUDA_CHECK(cudaMemPrefetchAsync(S, sizeof(float) * N, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(S, sizeof(float) * numTiles * TILE_DIM, device, stream));
 
     CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
     CUSOLVER_CHECK(cusolverDnSetStream(solverHandle, stream));
@@ -176,8 +177,8 @@ int main(int argc, char **argv){
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
 
-    mtxtp_a100_best_param(true, rows, cols, AT, lda, A, lda, stream);
-    cudaDeviceSynchronize();
+    const float one = 1, zero = 0;
+    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda, &zero, A, lda, A, lda));
 
     for(int i = 0; i < rows * cols; ++i){
         std::cout << A[i] << ", ";
@@ -185,23 +186,51 @@ int main(int argc, char **argv){
             std::cout << "\n";
         }
     }
-    
 
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
                                  CUSOLVER_EIG_MODE_VECTOR,
                                  TILE_DIM, TILE_DIM, 
-                                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
+                                 A, lda, S, U, ldu, V, ldv,
                                  &lwork, gesvdParams, batchSize));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&work), sizeof(float) * lwork));
 
-    CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
-                TILE_DIM, TILE_DIM, 
-                A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
-                work, lwork, info, gesvdParams, batchSize));
-    CUDA_CHECK(cudaDeviceSynchronize());
 
-    mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
-    mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
+    size_t tile_per_col = rows / TILE_DIM;
+    size_t tile_per_row = cols / TILE_DIM;
+    for(int cc = 0; cc < tile_per_row; ++cc){
+        // std::cout << "Now in " << A[cc * TILE_DIM * lda] << std::endl;
+        // CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
+        //     solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
+        //     TILE_DIM, TILE_DIM, 
+        //     A + cc * TILE_DIM * lda, lda, 
+        //     S + cc * lda, 
+        //     U + cc * TILE_DIM * lda, ldu, 
+        //     V + cc * TILE_DIM * lda, ldv,
+        //     work, lwork, info, gesvdParams, batchSize));
+        std::cout << "Now in " << A[cc * TILE_DIM] << std::endl;
+        CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
+            solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
+            TILE_DIM, TILE_DIM, 
+            A + cc * TILE_DIM, lda, 
+            S + cc * TILE_DIM * tile_per_col, 
+            U + cc * TILE_DIM, ldu, 
+            V + cc * TILE_DIM, ldv,
+            work, lwork, info, gesvdParams, batchSize));
+    }
+
+    // CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
+    //             TILE_DIM, TILE_DIM, 
+    //             A, lda, S, U, ldu, V, ldv,
+    //             work, lwork, info, gesvdParams, batchSize));
+    // CUDA_CHECK(cudaDeviceSynchronize());
+
+    // mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
+    // mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
+    // cudaDeviceSynchronize();
+
+    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, U, lda, &zero, pyU, lda, pyU, lda));
+    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, V, lda, &zero, pyV, lda, pyV, lda));
+
     cudaDeviceSynchronize();
 
     // print_matrix_rowmaj(pyU, 4, 4, 4);
@@ -212,7 +241,7 @@ int main(int argc, char **argv){
 
     writebin("../out/U.bin", pyU, sizeof(float) * rows * cols);
     writebin("../out/V.bin", pyV, sizeof(float) * rows * cols);
-    writebin("../out/S.bin", S, sizeof(float) * batchSize * TILE_DIM);
+    writebin("../out/S.bin", S, sizeof(float) * numTiles * TILE_DIM);
 
     // print_matrix_colmaj(A, rows, cols, lda);
     // print_matrix_colmaj(U, rows, cols, lda);
