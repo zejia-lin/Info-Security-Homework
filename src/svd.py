@@ -8,8 +8,8 @@ import subprocess
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 2400
-cols = 2400
+rows = 4
+cols = 4
 
 
 def tiled_svd(_A, _U, _S, _VT):
@@ -36,7 +36,7 @@ def tiled_gemm(A, U, S, VT, trans):
 
 
 np.random.seed(42)
-A = np.array(np.random.random(rows * cols)).reshape(rows, cols).astype(np.float32)
+A = np.array(np.arange(rows * cols)).reshape(rows, cols).astype(np.float32)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)
@@ -67,7 +67,7 @@ print(gpu_S, end='\n\n')
 
 gpu_inv = np.zeros_like(A)
 cpu_inv = np.zeros_like(A)
-tiled_gemm(gpu_inv, gpu_U, gpu_S, gpu_V, True)
+tiled_gemm(gpu_inv, gpu_V, gpu_S, gpu_U, True)
 tiled_gemm(cpu_inv, cpu_U, cpu_S, cpu_VT, False)
 
 print("Inverse GPU")
@@ -78,11 +78,11 @@ print(cpu_inv)
 
 
 slc = slice(0, 4)
-print()
+# print()
 
-print(A[slc, slc])
-print(gpu_U[slc, slc] @ np.diag(gpu_S[slc]) @ gpu_V[slc, slc])
-print(cpu_U[slc, slc] @ np.diag(cpu_S[slc]) @ cpu_VT[slc, slc])
+# print(A[slc, slc])
+# print(gpu_U[slc, slc] @ np.diag(gpu_S[slc]) @ gpu_V[slc, slc])
+# print(cpu_U[slc, slc] @ np.diag(cpu_S[slc]) @ cpu_VT[slc, slc])
 
 print(f"GPU vs CPU: {mean_squared_error(gpu_inv[slc, slc], cpu_inv[slc, slc])}")
 print(f"GPU vs Origin: {mean_squared_error(gpu_inv, A)}")

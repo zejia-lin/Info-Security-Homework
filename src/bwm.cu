@@ -121,6 +121,28 @@ int mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t
     std::cout << "Trans: " << dur << std::endl;
 }
 
+
+/**
+ * Matrix multiply diagonal, the API is similar to cublasGemmBatched. 
+ * Should be launched with 3D block (__, TILE_DIM, TILE_DIM) and 1D grid.
+ * Matrix stored in column major.
+*/
+__global__ void gpu_mmd_batched(float *A, float *D, float *res, size_t batchSize){
+    size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
+    for(; tile_id < batchSize; tile_id += blockDim.x){
+        size_t offset = threadIdx.y + threadIdx.z * TILE_DIM + tile_id * TILE_DIM * TILE_DIM;
+        res[offset] = A[offset] * D[threadIdx.y + tile_id * TILE_DIM * TILE_DIM];
+    }
+}
+
+void mmd_batched_a100_best_param(float *A, float *D, float *res, size_t batchSize){
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    gpu_mmd_batched<<<dimGrid, dimBlock>>>(A, D, res, batchSize);
+}
+
+
+
 int main(int argc, char **argv){
 
     int device = 0;
@@ -134,7 +156,7 @@ int main(int argc, char **argv){
     int cols = atoi(argv[2]);
 
     float *A, *AT, *U, *S, *V;
-    float *pyU, *pyS, *pyV;
+    float *pyU, *pyS, *pyV, *inv;
     int *info;
     int lda = rows;
     int ldu = rows;
@@ -149,8 +171,9 @@ int main(int argc, char **argv){
     gesvdjInfo_t gesvdParams;
     int lwork;
     float *work;
-    int batchSize = (cols / TILE_DIM);
+    int batchSize = (rows / TILE_DIM) * (cols / TILE_DIM);
     int numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
+    const float one = 1, zero = 0;
 
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
     CUDA_CHECK(cudaMallocManaged(&AT, sizeof(float) * rows * cols));
@@ -159,6 +182,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMallocManaged(&pyU, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&V, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&pyV, sizeof(float) * rows * cols));
+    CUDA_CHECK(cudaMallocManaged(&inv, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * numTiles * TILE_DIM));
 
     int bb = myreadbin("../out/A.bin", AT);
@@ -175,64 +199,100 @@ int main(int argc, char **argv){
     CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
     CUSOLVER_CHECK(cusolverDnSetStream(solverHandle, stream));
     CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(&gesvdParams));
-    // CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdParams, 1e-10));
+    // CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdParams, 1e-5));
     // CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(gesvdParams, 1000));
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
 
-    const float one = 1, zero = 0;
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda_T, &zero, A, lda, A, lda));
+    mtxtp_a100_best_param(true, rows, cols, AT, lda_T, A, lda, stream);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    
+    for(int tile_id = 0; tile_id < (cols / TILE_DIM) * (rows / TILE_DIM); ++tile_id){
+        for(int i = 0; i < TILE_DIM; ++i){
+            for(int j = 0; j < TILE_DIM; ++j){
+                std::cout << A[i + j * TILE_DIM + tile_id * TILE_DIM * TILE_DIM] << ", ";
+            }
+            std::cout << "\n";
+        }
+        std::cout << "===================\n";
+    }
+    // exit(0);
 
-    // for(int i = 0; i < rows * cols; ++i){
-    //     std::cout << A[i] << ", ";
-    //     if((i + 1) % cols == 0){
-    //         std::cout << "\n";
-    //     }
-    // }
+    // CUDA_CHECK(cudaMemcpy(A, AT, sizeof(float) * rows * cols, cudaMemcpyDefault));
+    // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda_T, &zero, A, lda, A, lda));
+
+    for(int i = 0; i < rows * cols; ++i){
+        std::cout << A[i] << ", ";
+        if((i + 1) % cols == 0){
+            std::cout << "\n";
+        }
+    }
 
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
                                  CUSOLVER_EIG_MODE_VECTOR,
                                  TILE_DIM, TILE_DIM, 
-                                 A, lda, S, U, ldu, V, ldv,
+                                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
                                  &lwork, gesvdParams, batchSize));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&work), sizeof(float) * lwork));
 
 
-    size_t tile_per_col = rows / TILE_DIM;
-    size_t tile_per_row = cols / TILE_DIM;
-    for(int cc = 0; cc < tile_per_row; ++cc){
-        size_t offset = cc * TILE_DIM;
-        std::cout << A[offset] << ", ";
-        CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
-            solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
-            TILE_DIM, TILE_DIM, 
-            A + offset, lda_T, 
-            S + offset * tile_per_col, 
-            U + offset, ldu_T, 
-            V + offset, ldv_T,
-            work, lwork, info, gesvdParams, batchSize));
-    }
+    // size_t tile_per_col = rows / TILE_DIM;
+    // size_t tile_per_row = cols / TILE_DIM;
+    // for(int cc = 0; cc < tile_per_row; ++cc){
+    //     size_t offset = cc * TILE_DIM;
+    //     std::cout << A[offset] << ", ";
+    //     CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
+    //         solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
+    //         TILE_DIM, TILE_DIM, 
+    //         A + offset, lda_T, 
+    //         S + offset * tile_per_col, 
+    //         U + offset, ldu_T, 
+    //         V + offset, ldv_T,
+    //         work, lwork, info, gesvdParams, batchSize));
+    // }
 
-    // CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
-    //             TILE_DIM, TILE_DIM, 
-    //             A, lda, S, U, ldu, V, ldv,
-    //             work, lwork, info, gesvdParams, batchSize));
-    // CUDA_CHECK(cudaDeviceSynchronize());
+    CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
+                TILE_DIM, TILE_DIM, 
+                A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
+                work, lwork, info, gesvdParams, batchSize));
+    CUDA_CHECK(cudaDeviceSynchronize());
 
-    // mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
-    // mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
-    // cudaDeviceSynchronize();
+    std::cout << "U\n";
+    print_matrix_colmaj(U, 4, 4, 4);
+    std::cout << "V\n";
+    print_matrix_colmaj(V, 4, 4, 4);
+    std::cout << "S\n";
+    print_matrix_colmaj(S, 1, 4, 4);
 
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, U, ldu, &zero, pyU, ldu_T, pyU, ldu_T));
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, V, ldv, &zero, pyV, ldv_T, pyV, ldv_T));
+    mmd_batched_a100_best_param(U, S, inv, batchSize);
+    cublasGemmStridedBatchedEx(
+        blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
+        TILE_DIM, TILE_DIM, TILE_DIM,
+        &one,
+        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        &zero,
+        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
+    );
 
     cudaDeviceSynchronize();
+
+
+    std::cout << "====================\nGemm from GPU\n";
+    print_matrix_colmaj(inv, 4, 4, 4);
 
     // print_matrix_rowmaj(pyU, 4, 4, 4);
     // print_matrix_rowmaj(pyV, 4, 4, 4);
     // print_matrix_rowmaj(S, 1, 4, 4);
 
-    // cublasGemmBatchedEx(blasHandle, CUBLAS_OP_N,)
+    mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
+    mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
+    cudaDeviceSynchronize();
+
+    // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, U, ldu, &zero, pyU, ldu_T, pyU, ldu_T));
+    // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, V, ldv, &zero, pyV, ldv_T, pyV, ldv_T));
+    // CUDA_CHECK(cudaDeviceSynchronize());
 
     writebin("../out/U.bin", pyU, sizeof(float) * rows * cols);
     writebin("../out/V.bin", pyV, sizeof(float) * rows * cols);
