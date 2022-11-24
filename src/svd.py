@@ -8,8 +8,8 @@ import subprocess
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 8
-cols = 8
+rows = 4
+cols = 4
 
 
 def tiled_svd(A, U, S, VT):
@@ -35,10 +35,11 @@ subprocess.run(f"../build/bwm {rows}".split())
 
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
 
-gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols).T
-gpu_VT = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols)
+gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols)
+gpu_VT = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols).T
 gpu_S = np.fromfile("../out/S.bin", dtype=np.float32)
 
+print("="*20)
 print(cpu_U, end='\n\n')
 print(gpu_U, end='\n\n')
 print(cpu_VT, end='\n\n')
