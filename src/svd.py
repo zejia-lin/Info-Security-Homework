@@ -45,7 +45,7 @@ A.tofile('../out/A.bin')
 print(A)
 
 subprocess.run("sh ../script/bwm.sh bwm.cu".split()).check_returncode()
-subprocess.run(f"../build/bwm {rows}".split())
+subprocess.run(f"../build/bwm {rows} {cols}".split())
 
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
 

@@ -129,16 +129,19 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaGetDeviceProperties(&prop, device));
     std::cout << "Using device " << device << " " << prop.name << std::endl;
 
-    int N = atoi(argv[1]);
-    int rows = N;
-    int cols = N;
+    // int N = atoi(argv[1]);
+    int rows = atoi(argv[1]);
+    int cols = atoi(argv[2]);
 
     float *A, *AT, *U, *S, *V;
     float *pyU, *pyS, *pyV;
     int *info;
-    int lda = N;
-    int ldu = N;
-    int ldv = N;
+    int lda = rows;
+    int ldu = rows;
+    int ldv = rows;
+    int lda_T = cols;
+    int ldu_T = cols;
+    int ldv_T = cols;
 
     cudaStream_t stream = NULL;
     cublasHandle_t blasHandle;
@@ -146,7 +149,7 @@ int main(int argc, char **argv){
     gesvdjInfo_t gesvdParams;
     int lwork;
     float *work;
-    int batchSize = (rows / TILE_DIM);
+    int batchSize = (cols / TILE_DIM);
     int numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
@@ -178,7 +181,7 @@ int main(int argc, char **argv){
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
 
     const float one = 1, zero = 0;
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda, &zero, A, lda, A, lda));
+    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda_T, &zero, A, lda, A, lda));
 
     // for(int i = 0; i < rows * cols; ++i){
     //     std::cout << A[i] << ", ";
@@ -198,23 +201,15 @@ int main(int argc, char **argv){
     size_t tile_per_col = rows / TILE_DIM;
     size_t tile_per_row = cols / TILE_DIM;
     for(int cc = 0; cc < tile_per_row; ++cc){
-        // std::cout << "Now in " << A[cc * TILE_DIM * lda] << std::endl;
-        // CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
-        //     solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
-        //     TILE_DIM, TILE_DIM, 
-        //     A + cc * TILE_DIM * lda, lda, 
-        //     S + cc * lda, 
-        //     U + cc * TILE_DIM * lda, ldu, 
-        //     V + cc * TILE_DIM * lda, ldv,
-        //     work, lwork, info, gesvdParams, batchSize));
-        // std::cout << "Now in " << A[cc * TILE_DIM] << std::endl;
+        size_t offset = cc * TILE_DIM;
+        std::cout << A[offset] << ", ";
         CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
             solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
             TILE_DIM, TILE_DIM, 
-            A + cc * TILE_DIM, lda, 
-            S + cc * TILE_DIM * tile_per_col, 
-            U + cc * TILE_DIM, ldu, 
-            V + cc * TILE_DIM, ldv,
+            A + offset, lda_T, 
+            S + offset * tile_per_col, 
+            U + offset, ldu_T, 
+            V + offset, ldv_T,
             work, lwork, info, gesvdParams, batchSize));
     }
 
@@ -228,8 +223,8 @@ int main(int argc, char **argv){
     // mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
     // cudaDeviceSynchronize();
 
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, U, lda, &zero, pyU, lda, pyU, lda));
-    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, V, lda, &zero, pyV, lda, pyV, lda));
+    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, U, ldu, &zero, pyU, ldu_T, pyU, ldu_T));
+    CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, V, ldv, &zero, pyV, ldv_T, pyV, ldv_T));
 
     cudaDeviceSynchronize();
 
@@ -247,5 +242,7 @@ int main(int argc, char **argv){
     // print_matrix_colmaj(U, rows, cols, lda);
     // print_matrix_colmaj(V, rows, cols, lda);
     // print_matrix_rowmaj(S, 1, N, lda);
+
+    std::cout << "Exit bwm with 0\n";
 
 }
