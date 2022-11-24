@@ -17,10 +17,10 @@ __global__ void gpu_mmd_batched(float *A, float *D, float *res, size_t batchSize
     }
 }
 
-void mmd_batched_a100_best_param(float *A, float *D, float *res, size_t batchSize){
+void mmd_batched_a100_best_param(float *A, float *D, float *res, size_t batchSize, cudaStream_t stream=0){
     dim3 dimGrid = dim3(512);
-    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
-    gpu_mmd_batched<<<dimGrid, dimBlock>>>(A, D, res, batchSize);
+    dim3 dimBlock = dim3(32, TILE_DIM, TILE_DIM);
+    gpu_mmd_batched<<<dimGrid, dimBlock, 0, stream>>>(A, D, res, batchSize);
 }
 
 int main(){
@@ -40,8 +40,18 @@ int main(){
         D[i] = D[i - 1] * 10;
     }
 
+    cudaMemPrefetchAsync(A, sizeof(float) * N * N, 0);
+    cudaMemPrefetchAsync(res, sizeof(float) * N * N, 0);
+    cudaMemPrefetchAsync(D, sizeof(float) * 16, 0);
+    cudaDeviceSynchronize();
+
+    __TIMER_START__(compute_time);
+
     mmd_batched_a100_best_param(A, D, res, 4);
     cudaDeviceSynchronize();
+
+    __TIMER_STOP__(compute_time);
+    std::cout << "Compute " << compute_time << " ms\n";
 
     print_matrix_colmaj(A, N, N, N);
     print_matrix_colmaj(res, N, N, N);

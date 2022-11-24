@@ -29,9 +29,11 @@ def tiled_gemm(A, U, S, VT, trans):
             sj = slice(j*TILE, j*TILE+TILE)
             ss = slice((i * (rows // TILE) + j) * TILE, (i * (rows // TILE) + j) * TILE + TILE)
             if trans:
-                A[si, sj] = U[si, sj] @ np.diag(S[ss]) @ VT[si, sj].T
+                A[si, sj] = U[si, sj].T @ np.diag(S[ss]) @ VT[si, sj]
             else:
                 A[si, sj] = U[si, sj] @ np.diag(S[ss]) @ VT[si, sj]
+    if trans:
+        np.copyto(A, A.T)
 
 
 
