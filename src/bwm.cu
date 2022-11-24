@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include "myutils.cpp"
+#include "mmd.cu"
 #include "mydct.cu"
 #include "constants.h"
 
@@ -122,25 +123,6 @@ int mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t
 }
 
 
-/**
- * Matrix multiply diagonal, the API is similar to cublasGemmBatched. 
- * Should be launched with 3D block (__, TILE_DIM, TILE_DIM) and 1D grid.
- * Matrix stored in column major.
-*/
-__global__ void gpu_mmd_batched(float *A, float *D, float *res, size_t batchSize){
-    size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    for(; tile_id < batchSize; tile_id += blockDim.x){
-        size_t offset = threadIdx.y + threadIdx.z * TILE_DIM + tile_id * TILE_DIM * TILE_DIM;
-        res[offset] = A[offset] * D[threadIdx.y + tile_id * TILE_DIM];
-    }
-}
-
-void mmd_batched_a100_best_param(float *A, float *D, float *res, size_t batchSize, cudaStream_t stream=0){
-    dim3 dimGrid = dim3(512);
-    dim3 dimBlock = dim3(32, TILE_DIM, TILE_DIM);
-    gpu_mmd_batched<<<dimGrid, dimBlock, 0, stream>>>(A, D, res, batchSize);
-}
-
 
 
 int main(int argc, char **argv){
@@ -185,7 +167,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMallocManaged(&inv, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * numTiles * TILE_DIM));
 
-    int bb = myreadbin("../out/A.bin", AT);
+    int bb = myreadbin("../out/A.bin", A);
 
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * batchSize, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(AT, sizeof(float) * rows * cols, device, stream));
@@ -204,7 +186,7 @@ int main(int argc, char **argv){
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
 
-    mtxtp_a100_best_param(true, rows, cols, AT, lda_T, A, lda, stream);
+    // mtxtp_a100_best_param(true, rows, cols, AT, lda_T, A, lda, stream);
     // CUDA_CHECK(cudaDeviceSynchronize());
     
     for(int tile_id = 0; tile_id < (cols / TILE_DIM) * (rows / TILE_DIM); ++tile_id){
@@ -261,15 +243,15 @@ int main(int argc, char **argv){
     std::cout << "V\n";
     print_matrix_colmaj(V, 4, 4, 4);
     std::cout << "S\n";
-    print_matrix_colmaj(S, 1, 4, 4);
+    print_matrix_rowmaj(S, 1, 4, 4);
 
-    mmd_batched_a100_best_param(U, S, inv, batchSize);
+    mmd_batched_a100_best_param(false, V, S, inv, batchSize);
     cublasGemmStridedBatchedEx(
         blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
         TILE_DIM, TILE_DIM, TILE_DIM,
         &one,
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        U, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         &zero,
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
@@ -285,13 +267,18 @@ int main(int argc, char **argv){
     // print_matrix_rowmaj(pyV, 4, 4, 4);
     // print_matrix_rowmaj(S, 1, 4, 4);
 
-    // mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
-    // mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
+    mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
+    mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
     cudaDeviceSynchronize();
 
     // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, U, ldu, &zero, pyU, ldu_T, pyU, ldu_T));
     // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, V, ldv, &zero, pyV, ldv_T, pyV, ldv_T));
     // CUDA_CHECK(cudaDeviceSynchronize());
+
+    // std::cout << "======================\nU\n";
+    // print_matrix_rowmaj(V, rows, cols, lda);
+    // std::cout << "======================\npyU\n";
+    // print_matrix_rowmaj(pyV, rows, cols, lda);
 
     writebin("../out/U.bin", U, sizeof(float) * rows * cols);
     writebin("../out/V.bin", V, sizeof(float) * rows * cols);

@@ -32,8 +32,6 @@ def tiled_gemm(A, U, S, VT, trans):
                 A[si, sj] = U[si, sj].T @ np.diag(S[ss]) @ VT[si, sj]
             else:
                 A[si, sj] = U[si, sj] @ np.diag(S[ss]) @ VT[si, sj]
-    if trans:
-        np.copyto(A, A.T)
 
 
 
