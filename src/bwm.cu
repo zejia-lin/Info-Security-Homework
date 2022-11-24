@@ -146,7 +146,7 @@ int main(int argc, char **argv){
     gesvdjInfo_t gesvdParams;
     int lwork;
     float *work;
-    int batchSize = 2;
+    int batchSize = (rows / TILE_DIM);
     int numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
@@ -180,12 +180,12 @@ int main(int argc, char **argv){
     const float one = 1, zero = 0;
     CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda, &zero, A, lda, A, lda));
 
-    for(int i = 0; i < rows * cols; ++i){
-        std::cout << A[i] << ", ";
-        if((i + 1) % cols == 0){
-            std::cout << "\n";
-        }
-    }
+    // for(int i = 0; i < rows * cols; ++i){
+    //     std::cout << A[i] << ", ";
+    //     if((i + 1) % cols == 0){
+    //         std::cout << "\n";
+    //     }
+    // }
 
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
                                  CUSOLVER_EIG_MODE_VECTOR,
@@ -207,7 +207,7 @@ int main(int argc, char **argv){
         //     U + cc * TILE_DIM * lda, ldu, 
         //     V + cc * TILE_DIM * lda, ldv,
         //     work, lwork, info, gesvdParams, batchSize));
-        std::cout << "Now in " << A[cc * TILE_DIM] << std::endl;
+        // std::cout << "Now in " << A[cc * TILE_DIM] << std::endl;
         CUSOLVER_CHECK(cusolverDnSgesvdjBatched(
             solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
             TILE_DIM, TILE_DIM, 

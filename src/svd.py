@@ -8,8 +8,8 @@ import subprocess
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 8
-cols = 8
+rows = 2400
+cols = 2400
 
 
 def tiled_svd(_A, _U, _S, _VT):
@@ -18,7 +18,7 @@ def tiled_svd(_A, _U, _S, _VT):
             si = slice(i*TILE, i*TILE+TILE)
             sj = slice(j*TILE, j*TILE+TILE)
             ss = slice((i * (rows // TILE) + j) * TILE, (i * (rows // TILE) + j) * TILE + TILE)
-            print(_A[si, sj])
+            # print(_A[si, sj])
             _U[si, sj], _S[ss], _VT[si, sj] = np.linalg.svd(_A[si, sj])
 
 
@@ -36,7 +36,7 @@ def tiled_gemm(A, U, S, VT, trans):
 
 
 np.random.seed(42)
-A = np.array(range(rows * cols)).reshape(rows, cols).astype(np.float32)
+A = np.array(np.random.random(rows * cols)).reshape(rows, cols).astype(np.float32)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)
