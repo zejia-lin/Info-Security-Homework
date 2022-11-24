@@ -245,13 +245,13 @@ int main(int argc, char **argv){
     std::cout << "S\n";
     print_matrix_rowmaj(S, 1, 4, 4);
 
-    mmd_batched_a100_best_param(false, V, S, inv, batchSize);
+    mmd_batched_a100_best_param(false, U, S, inv, batchSize);
     cublasGemmStridedBatchedEx(
         blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
         TILE_DIM, TILE_DIM, TILE_DIM,
         &one,
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        U, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         &zero,
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
@@ -261,7 +261,7 @@ int main(int argc, char **argv){
 
 
     std::cout << "====================\nGemm from GPU\n";
-    print_matrix_colmaj(inv, 4, 4, 4);
+    print_matrix_rowmaj(inv, 4, 4, 4);
 
     // print_matrix_rowmaj(pyU, 4, 4, 4);
     // print_matrix_rowmaj(pyV, 4, 4, 4);

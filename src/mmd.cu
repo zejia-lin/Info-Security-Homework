@@ -25,7 +25,7 @@ __global__ void gpu_mmd_rhs_batched(float *A, float *D, float *res, size_t batch
     size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     for(; tile_id < batchSize; tile_id += blockDim.x){
         size_t offset = threadIdx.y + threadIdx.z * TILE_DIM + tile_id * TILE_DIM * TILE_DIM;
-        res[offset] = A[offset] * D[threadIdx.z * TILE_DIM + tile_id * TILE_DIM];
+        res[offset] = A[offset] * D[threadIdx.z + tile_id * TILE_DIM];
     }
 }
 

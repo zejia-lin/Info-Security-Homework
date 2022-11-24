@@ -29,10 +29,11 @@ def tiled_gemm(A, U, S, VT, trans):
             sj = slice(j*TILE, j*TILE+TILE)
             ss = slice((i * (rows // TILE) + j) * TILE, (i * (rows // TILE) + j) * TILE + TILE)
             if trans:
-                A[si, sj] = U[si, sj].T @ np.diag(S[ss]) @ VT[si, sj]
+                A[si, sj] = U[si, sj] @ np.diag(S[ss]) @ VT[si, sj].T
             else:
                 A[si, sj] = U[si, sj] @ np.diag(S[ss]) @ VT[si, sj]
-
+    if trans:
+        np.copyto(A, A.T)
 
 
 np.random.seed(42)
@@ -49,8 +50,8 @@ subprocess.run(f"../build/bwm {rows} {cols}".split())
 
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
 
-gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols)
-gpu_V = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols)
+gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols).T
+gpu_V = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols).T
 gpu_S = np.fromfile("../out/S.bin", dtype=np.float32)
 
 print("CPU U")
@@ -67,7 +68,7 @@ print(gpu_S, end='\n\n')
 
 gpu_inv = np.zeros_like(A)
 cpu_inv = np.zeros_like(A)
-tiled_gemm(gpu_inv, gpu_V, gpu_S, gpu_U, True)
+tiled_gemm(gpu_inv, gpu_U, gpu_S, gpu_V, True)
 tiled_gemm(cpu_inv, cpu_U, cpu_S, cpu_VT, False)
 
 print("Inverse GPU")
