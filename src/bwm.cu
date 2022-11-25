@@ -127,25 +127,19 @@ int mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t
 
 int main(int argc, char **argv){
 
+    __TIMER_START__(end2end);
+
     int device = 0;
     cudaDeviceProp prop;
     CUDA_CHECK(cudaGetDevice(&device));
     CUDA_CHECK(cudaGetDeviceProperties(&prop, device));
     std::cout << "Using device " << device << " " << prop.name << std::endl;
 
-    // int N = atoi(argv[1]);
     int rows = atoi(argv[1]);
     int cols = atoi(argv[2]);
 
-    float *A, *AT, *U, *S, *V;
-    float *pyU, *pyV, *inv;
+    float *A, *U, *S, *V, *inv;
     int *info;
-    int lda = rows;
-    // int ldu = rows;
-    // int ldv = rows;
-    int lda_T = cols;
-    // int ldu_T = cols;
-    // int ldv_T = cols;
 
     cudaStream_t stream = NULL;
     cublasHandle_t blasHandle;
@@ -157,25 +151,20 @@ int main(int argc, char **argv){
     int numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
     const float one = 1, zero = 0;
 
+
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
-    CUDA_CHECK(cudaMallocManaged(&AT, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&A, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&U, sizeof(float) * rows * cols));
-    CUDA_CHECK(cudaMallocManaged(&pyU, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&V, sizeof(float) * rows * cols));
-    CUDA_CHECK(cudaMallocManaged(&pyV, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&inv, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * numTiles * TILE_DIM));
 
     int bb = myreadbin("../out/A.bin", A);
 
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * batchSize, device, stream));
-    CUDA_CHECK(cudaMemPrefetchAsync(AT, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(A, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(U, sizeof(float) * rows * cols, device, stream));
-    CUDA_CHECK(cudaMemPrefetchAsync(pyU, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(V, sizeof(float) * rows * cols, device, stream));
-    CUDA_CHECK(cudaMemPrefetchAsync(pyV, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(S, sizeof(float) * numTiles * TILE_DIM, device, stream));
 
     CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
@@ -185,31 +174,6 @@ int main(int argc, char **argv){
     CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(gesvdParams, 1000));
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
-
-    // mtxtp_a100_best_param(true, rows, cols, AT, lda_T, A, lda, stream);
-    // CUDA_CHECK(cudaDeviceSynchronize());
-    
-    // for(int tile_id = 0; tile_id < (cols / TILE_DIM) * (rows / TILE_DIM); ++tile_id){
-    //     for(int i = 0; i < TILE_DIM; ++i){
-    //         for(int j = 0; j < TILE_DIM; ++j){
-    //             std::cout << A[i + j * TILE_DIM + tile_id * TILE_DIM * TILE_DIM] << ", ";
-    //         }
-    //         std::cout << "\n";
-    //     }
-    //     std::cout << "===================\n";
-    // }
-    // exit(0);
-
-    // CUDA_CHECK(cudaMemcpy(A, AT, sizeof(float) * rows * cols, cudaMemcpyDefault));
-    // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda_T, &zero, A, lda, A, lda));
-
-    // for(int i = 0; i < rows * cols; ++i){
-    //     std::cout << A[i] << ", ";
-    //     if((i + 1) % cols == 0){
-    //         std::cout << "\n";
-    //     }
-    // }
-
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
                                  CUSOLVER_EIG_MODE_VECTOR,
                                  TILE_DIM, TILE_DIM, 
@@ -217,33 +181,24 @@ int main(int argc, char **argv){
                                  &lwork, gesvdParams, batchSize));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&work), sizeof(float) * lwork));
 
+    __TIMER_START__(computation);
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
                 TILE_DIM, TILE_DIM, 
                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
                 work, lwork, info, gesvdParams, batchSize));
     CUDA_CHECK(cudaDeviceSynchronize());
+    __TIMER_STOP__(computation);
 
     for(int i = 0; i < batchSize; ++i){
         if (0 == info[i]) {
             // std::printf("matrix %d: gesvdj converges \n", i);
         } else if (0 > info[i]) {
-            /* only info[0] shows if some input parameter is wrong.
-             * If so, the error is CUSOLVER_STATUS_INVALID_VALUE.
-             */
             std::printf("Error: %d-th parameter is wrong \n", -info[i]);
             exit(1);
-        } else { /* info = m+1 */
-                 /* if info[i] is not zero, Jacobi method does not converge at i-th matrix. */
+        } else {
             std::printf("WARNING: matrix %d, info = %d : gesvdj does not converge \n", i, info[i]);
         }
     }
-
-    // std::cout << "U\n";
-    // print_matrix_colmaj(U, 4, 4, 4);
-    // std::cout << "V\n";
-    // print_matrix_colmaj(V, 4, 4, 4);
-    // std::cout << "S\n";
-    // print_matrix_rowmaj(S, 1, 4, 4);
 
     mmd_batched_a100_best_param(false, U, S, inv, batchSize);
     cublasGemmStridedBatchedEx(
@@ -256,39 +211,16 @@ int main(int argc, char **argv){
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
     );
-
     cudaDeviceSynchronize();
 
-
-    std::cout << "====================\nGemm from GPU\n";
+    // std::cout << "====================\nGemm from GPU\n";
     // print_matrix_rowmaj(inv, 8, 8, 8);
 
-    // print_matrix_rowmaj(pyU, 4, 4, 4);
-    // print_matrix_rowmaj(pyV, 4, 4, 4);
-    // print_matrix_rowmaj(S, 1, 4, 4);
-
-    mtxtp_a100_best_param(false, rows, cols, U, lda, pyU, lda, stream);
-    mtxtp_a100_best_param(false, rows, cols, V, lda, pyV, lda, stream);
-    cudaDeviceSynchronize();
-
-    // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, U, ldu, &zero, pyU, ldu_T, pyU, ldu_T));
-    // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, cols, rows, &one, V, ldv, &zero, pyV, ldv_T, pyV, ldv_T));
-    // CUDA_CHECK(cudaDeviceSynchronize());
-
-    // std::cout << "======================\nU\n";
-    // print_matrix_rowmaj(V, rows, cols, lda);
-    // std::cout << "======================\npyU\n";
-    // print_matrix_rowmaj(pyV, rows, cols, lda);
-
-    writebin("../out/U.bin", U, sizeof(float) * rows * cols);
-    writebin("../out/V.bin", V, sizeof(float) * rows * cols);
-    writebin("../out/S.bin", S, sizeof(float) * numTiles * TILE_DIM);
     writebin("../out/inv.bin", inv, sizeof(float) * rows * cols);
 
-    // print_matrix_colmaj(A, rows, cols, lda);
-    // print_matrix_colmaj(U, rows, cols, lda);
-    // print_matrix_colmaj(V, rows, cols, lda);
-    // print_matrix_rowmaj(S, 1, N, lda);
+    std::cout << "GPU computation " << computation << " ms\n";
+    __TIMER_STOP__(end2end);
+    std::cout << "GPU end to end " << end2end << " ms\n";
 
     std::cout << "Exit bwm with 0\n";
 

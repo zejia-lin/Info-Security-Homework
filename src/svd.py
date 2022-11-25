@@ -3,6 +3,7 @@ import cv2
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import mean_squared_error
 import subprocess
+import time
 
 
 np.set_printoptions(3, suppress=True)
@@ -48,26 +49,15 @@ print(A)
 subprocess.run("sh ../script/bwm.sh bwm.cu".split()).check_returncode()
 subprocess.run(f"../build/bwm {rows} {cols}".split())
 
+st = time.time()
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
+ed = time.time()
+print(f"CPU end to end {(ed - st) * 1000} ms")
 
 gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols).T
 gpu_V = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols).T
 gpu_S = np.fromfile("../out/S.bin", dtype=np.float32)
 
-# print("CPU U")
-# print(cpu_U, end='\n\n')
-# print("GPU U")
-# print(gpu_U, end='\n\n')
-# print("CPU V")
-# print(cpu_VT, end='\n\n')
-# print("GPU V")
-# print(gpu_V, end='\n\n')
-# print(cpu_S, end='\n\n')
-# print(gpu_S, end='\n\n')
-
-
-# gpu_inv = np.zeros_like(A)\
-# tiled_gemm(gpu_inv, gpu_U, gpu_S, gpu_V, True)
 gpu_inv = np.fromfile('../out/inv.bin', dtype=np.float32).reshape(rows, cols)
 cpu_inv = np.zeros_like(A)
 tiled_gemm(cpu_inv, cpu_U, cpu_S, cpu_VT, False)
@@ -78,13 +68,7 @@ print(gpu_inv)
 print("Inverse CPU")
 print(cpu_inv)
 
-
 slc = slice(0, 4)
-# print()
-
-# print(A[slc, slc])
-# print(gpu_U[slc, slc] @ np.diag(gpu_S[slc]) @ gpu_V[slc, slc])
-# print(cpu_U[slc, slc] @ np.diag(cpu_S[slc]) @ cpu_VT[slc, slc])
 
 print(f"GPU vs CPU: {mean_squared_error(gpu_inv[slc, slc], cpu_inv[slc, slc])}")
 print(f"GPU vs Origin: {mean_squared_error(gpu_inv, A)}")
