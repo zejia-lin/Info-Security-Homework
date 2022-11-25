@@ -9,34 +9,6 @@
 #include "mydct.cu"
 #include "constants.h"
 
-struct myhandle {
-    cusolverDnHandle_t solver;
-    cublasHandle_t blas;
-    int lwork;
-    float *work;
-};
-
-
-void gesvd(size_t rows, size_t cols, float *A, size_t lda, float *S, float *U, size_t ldu, float *V, size_t ldv, cudaStream_t stream=0){
-
-    cusolverDnHandle_t cusolverHandle;
-    gesvdjInfo_t gesvdinfo;
-    int lwork;
-    // float *work;
-    int batch_size = (rows / TILE_DIM) * (cols / TILE_DIM);
-
-    CUSOLVER_CHECK(cusolverDnCreate(&cusolverHandle));
-    CUSOLVER_CHECK(cusolverDnSetStream(cusolverHandle, stream));
-    CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(&gesvdinfo));
-
-    cusolverDnSgesvdjBatched_bufferSize(cusolverHandle, 
-                                 CUSOLVER_EIG_MODE_VECTOR,
-                                 rows, cols, 
-                                 A, lda, S, U, ldu, V, ldv,
-                                 &lwork, gesvdinfo, batch_size);
-
-}
-
 
 void tiled_add_wm(size_t rows, size_t cols, float *A, size_t lda, float *res, size_t ldres, float *workspace, cudaStream_t stream=0){
 
@@ -170,7 +142,7 @@ int main(int argc, char **argv){
     CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
     CUSOLVER_CHECK(cusolverDnSetStream(solverHandle, stream));
     CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(&gesvdParams));
-    CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdParams, 1e-5));
+    CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdParams, 1e-3));
     CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(gesvdParams, 1000));
     CUBLAS_CHECK(cublasCreate(&blasHandle));
     CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
@@ -181,13 +153,29 @@ int main(int argc, char **argv){
                                  &lwork, gesvdParams, batchSize));
     CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&work), sizeof(float) * lwork));
 
+    std::cout << "Allocated " << lwork << " float buffer for gesvd\n";
+
     __TIMER_START__(computation);
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
                 TILE_DIM, TILE_DIM, 
                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
                 work, lwork, info, gesvdParams, batchSize));
     CUDA_CHECK(cudaDeviceSynchronize());
+
+    mmd_batched_a100_best_param(false, U, S, inv, batchSize);
+    cublasGemmStridedBatchedEx(
+        blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
+        TILE_DIM, TILE_DIM, TILE_DIM,
+        &one,
+        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        &zero,
+        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        batchSize, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT
+    );
+    cudaDeviceSynchronize();
     __TIMER_STOP__(computation);
+
 
     for(int i = 0; i < batchSize; ++i){
         if (0 == info[i]) {
@@ -199,19 +187,6 @@ int main(int argc, char **argv){
             std::printf("WARNING: matrix %d, info = %d : gesvdj does not converge \n", i, info[i]);
         }
     }
-
-    mmd_batched_a100_best_param(false, U, S, inv, batchSize);
-    cublasGemmStridedBatchedEx(
-        blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
-        TILE_DIM, TILE_DIM, TILE_DIM,
-        &one,
-        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        &zero,
-        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
-    );
-    cudaDeviceSynchronize();
 
     // std::cout << "====================\nGemm from GPU\n";
     // print_matrix_rowmaj(inv, 8, 8, 8);

@@ -9,8 +9,8 @@ import time
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 4
-cols = 9
+rows = 2400
+cols = 2400
 
 
 def tiled_svd(_A, _U, _S, _VT):
@@ -38,7 +38,7 @@ def tiled_gemm(A, U, S, VT, trans):
 
 
 np.random.seed(42)
-A = np.array(np.arange(rows * cols)).reshape(rows, cols).astype(np.float32)
+A = np.array(np.random.random(rows * cols)).reshape(rows, cols).astype(np.float32)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)
@@ -46,8 +46,8 @@ A.tofile('../out/A.bin')
 
 print(A)
 
-subprocess.run("sh ../script/bwm.sh bwm.cu".split()).check_returncode()
-subprocess.run(f"../build/bwm {rows} {cols}".split())
+subprocess.run("sh ../script/bwm.sh svd.cu".split()).check_returncode()
+subprocess.run(f"../build/svd {rows} {cols}".split())
 
 st = time.time()
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
