@@ -80,7 +80,7 @@ __global__ void gpu_unpack_and_trans(size_t rows, size_t cols, const float *A, s
 }
 
 
-int mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc, cudaStream_t stream=0){
+void mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t lda, float *C, size_t ldc, cudaStream_t stream=0){
     dim3 dimGrid(1024);
     dim3 dimgBlock(8, TILE_DIM, TILE_DIM);
     size_t smemSize = TILE_DIM * TILE_DIM * sizeof(int);
@@ -94,6 +94,48 @@ int mtxtp_a100_best_param(bool input, size_t rows, size_t cols, float *A, size_t
     std::cout << "Trans: " << dur << std::endl;
 }
 
+void init_cudalib(cusolverDnHandle_t *solverHandle, cublasHandle_t *blasHandle, size_t batchSize, 
+                    float *A, float *U, float *S, float *V,
+                    float **work, int *lwork, gesvdjInfo_t *gesvdParams, cudaStream_t stream){
+    CUSOLVER_CHECK(cusolverDnCreate(solverHandle));
+    CUSOLVER_CHECK(cusolverDnSetStream(*solverHandle, stream));
+    CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(gesvdParams));
+    CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(*gesvdParams, 1e-3));
+    CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(*gesvdParams, 1000));
+    CUBLAS_CHECK(cublasCreate(blasHandle));
+    CUBLAS_CHECK(cublasSetStream(*blasHandle, stream));
+    CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(*solverHandle, 
+                                 CUSOLVER_EIG_MODE_VECTOR,
+                                 TILE_DIM, TILE_DIM, 
+                                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
+                                 lwork, *gesvdParams, batchSize));
+    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(work), sizeof(float) * (*lwork)));
+}
+
+
+void gesvd_a100_best_param(cusolverDnHandle_t solverHandle, size_t batchSize, 
+                            float *A, float *U, float *S, float *V, 
+                            float *work, int lwork, int *info, gesvdjInfo_t gesvdParams){
+    CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
+                TILE_DIM, TILE_DIM, 
+                A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
+                work, lwork, info, gesvdParams, batchSize));
+}
+
+void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *inv, float *U, float *S, float *V){
+    const float one = 1, zero = 0;
+    mmd_batched_a100_best_param(false, U, S, inv, batchSize);
+    CUBLAS_CHECK(cublasGemmStridedBatchedEx(
+        blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
+        TILE_DIM, TILE_DIM, TILE_DIM,
+        &one,
+        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        &zero,
+        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
+        batchSize, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT
+    ));
+}
 
 
 
@@ -139,40 +181,15 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMemPrefetchAsync(V, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(S, sizeof(float) * numTiles * TILE_DIM, device, stream));
 
-    CUSOLVER_CHECK(cusolverDnCreate(&solverHandle));
-    CUSOLVER_CHECK(cusolverDnSetStream(solverHandle, stream));
-    CUSOLVER_CHECK(cusolverDnCreateGesvdjInfo(&gesvdParams));
-    CUSOLVER_CHECK(cusolverDnXgesvdjSetTolerance(gesvdParams, 1e-3));
-    CUSOLVER_CHECK(cusolverDnXgesvdjSetMaxSweeps(gesvdParams, 1000));
-    CUBLAS_CHECK(cublasCreate(&blasHandle));
-    CUBLAS_CHECK(cublasSetStream(blasHandle, stream));
-    CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
-                                 CUSOLVER_EIG_MODE_VECTOR,
-                                 TILE_DIM, TILE_DIM, 
-                                 A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
-                                 &lwork, gesvdParams, batchSize));
-    CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&work), sizeof(float) * lwork));
-
+    init_cudalib(&solverHandle, &blasHandle, batchSize, A, U, S, V, &work, &lwork, &gesvdParams, stream);
     std::cout << "Allocated " << lwork << " float buffer for gesvd\n";
 
     __TIMER_START__(computation);
-    CUSOLVER_CHECK(cusolverDnSgesvdjBatched(solverHandle, CUSOLVER_EIG_MODE_VECTOR, 
-                TILE_DIM, TILE_DIM, 
-                A, TILE_DIM, S, U, TILE_DIM, V, TILE_DIM,
-                work, lwork, info, gesvdParams, batchSize));
+    gesvd_a100_best_param(solverHandle, batchSize, A, U, S, V, work, lwork, info, gesvdParams);
     CUDA_CHECK(cudaDeviceSynchronize());
 
     mmd_batched_a100_best_param(false, U, S, inv, batchSize);
-    cublasGemmStridedBatchedEx(
-        blasHandle, CUBLAS_OP_N, CUBLAS_OP_T, 
-        TILE_DIM, TILE_DIM, TILE_DIM,
-        &one,
-        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        &zero,
-        inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        batchSize, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT
-    );
+    invsvd_a100_best_param(blasHandle, batchSize, inv, U, S, V);
     cudaDeviceSynchronize();
     __TIMER_STOP__(computation);
 
