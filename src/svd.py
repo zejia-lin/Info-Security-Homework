@@ -9,8 +9,8 @@ import time
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 2400
-cols = 2400
+rows = 4
+cols = 9
 
 
 def tiled_svd(_A, _U, _S, _VT):
@@ -38,7 +38,7 @@ def tiled_gemm(A, U, S, VT, trans):
 
 
 np.random.seed(42)
-A = np.array(np.random.random(rows * cols)).reshape(rows, cols).astype(np.float32)
+A = np.array(np.arange(rows * cols)).reshape(rows, cols).astype(np.float32)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)
@@ -53,10 +53,6 @@ st = time.time()
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)
 ed = time.time()
 print(f"CPU end to end {(ed - st) * 1000} ms")
-
-gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols).T
-gpu_V = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols).T
-gpu_S = np.fromfile("../out/S.bin", dtype=np.float32)
 
 gpu_inv = np.fromfile('../out/inv.bin', dtype=np.float32).reshape(rows, cols)
 cpu_inv = np.zeros_like(A)
