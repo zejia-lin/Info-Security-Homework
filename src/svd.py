@@ -8,8 +8,8 @@ import subprocess
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 4
-cols = 4
+rows = 2400
+cols = 2400
 
 
 def tiled_svd(_A, _U, _S, _VT):
@@ -37,7 +37,7 @@ def tiled_gemm(A, U, S, VT, trans):
 
 
 np.random.seed(42)
-A = np.array(np.arange(rows * cols)).reshape(rows, cols).astype(np.float32)
+A = np.array(np.random.random(rows * cols)).reshape(rows, cols).astype(np.float32)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)
@@ -54,21 +54,22 @@ gpu_U = np.fromfile("../out/U.bin", dtype=np.float32).reshape(rows, cols).T
 gpu_V = np.fromfile("../out/V.bin", dtype=np.float32).reshape(rows, cols).T
 gpu_S = np.fromfile("../out/S.bin", dtype=np.float32)
 
-print("CPU U")
-print(cpu_U, end='\n\n')
-print("GPU U")
-print(gpu_U, end='\n\n')
-print("CPU V")
-print(cpu_VT, end='\n\n')
-print("GPU V")
-print(gpu_V, end='\n\n')
-print(cpu_S, end='\n\n')
-print(gpu_S, end='\n\n')
+# print("CPU U")
+# print(cpu_U, end='\n\n')
+# print("GPU U")
+# print(gpu_U, end='\n\n')
+# print("CPU V")
+# print(cpu_VT, end='\n\n')
+# print("GPU V")
+# print(gpu_V, end='\n\n')
+# print(cpu_S, end='\n\n')
+# print(gpu_S, end='\n\n')
 
 
-gpu_inv = np.zeros_like(A)
+# gpu_inv = np.zeros_like(A)\
+# tiled_gemm(gpu_inv, gpu_U, gpu_S, gpu_V, True)
+gpu_inv = np.fromfile('../out/inv.bin', dtype=np.float32).reshape(rows, cols)
 cpu_inv = np.zeros_like(A)
-tiled_gemm(gpu_inv, gpu_U, gpu_S, gpu_V, True)
 tiled_gemm(cpu_inv, cpu_U, cpu_S, cpu_VT, False)
 
 print("Inverse GPU")

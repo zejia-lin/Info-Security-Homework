@@ -189,26 +189,26 @@ int main(int argc, char **argv){
     // mtxtp_a100_best_param(true, rows, cols, AT, lda_T, A, lda, stream);
     // CUDA_CHECK(cudaDeviceSynchronize());
     
-    for(int tile_id = 0; tile_id < (cols / TILE_DIM) * (rows / TILE_DIM); ++tile_id){
-        for(int i = 0; i < TILE_DIM; ++i){
-            for(int j = 0; j < TILE_DIM; ++j){
-                std::cout << A[i + j * TILE_DIM + tile_id * TILE_DIM * TILE_DIM] << ", ";
-            }
-            std::cout << "\n";
-        }
-        std::cout << "===================\n";
-    }
+    // for(int tile_id = 0; tile_id < (cols / TILE_DIM) * (rows / TILE_DIM); ++tile_id){
+    //     for(int i = 0; i < TILE_DIM; ++i){
+    //         for(int j = 0; j < TILE_DIM; ++j){
+    //             std::cout << A[i + j * TILE_DIM + tile_id * TILE_DIM * TILE_DIM] << ", ";
+    //         }
+    //         std::cout << "\n";
+    //     }
+    //     std::cout << "===================\n";
+    // }
     // exit(0);
 
     // CUDA_CHECK(cudaMemcpy(A, AT, sizeof(float) * rows * cols, cudaMemcpyDefault));
     // CUBLAS_CHECK(cublasSgeam(blasHandle, CUBLAS_OP_T, CUBLAS_OP_N, rows, cols, &one, AT, lda_T, &zero, A, lda, A, lda));
 
-    for(int i = 0; i < rows * cols; ++i){
-        std::cout << A[i] << ", ";
-        if((i + 1) % cols == 0){
-            std::cout << "\n";
-        }
-    }
+    // for(int i = 0; i < rows * cols; ++i){
+    //     std::cout << A[i] << ", ";
+    //     if((i + 1) % cols == 0){
+    //         std::cout << "\n";
+    //     }
+    // }
 
     CUSOLVER_CHECK(cusolverDnSgesvdjBatched_bufferSize(solverHandle, 
                                  CUSOLVER_EIG_MODE_VECTOR,
@@ -225,7 +225,7 @@ int main(int argc, char **argv){
 
     for(int i = 0; i < batchSize; ++i){
         if (0 == info[i]) {
-            std::printf("matrix %d: gesvdj converges \n", i);
+            // std::printf("matrix %d: gesvdj converges \n", i);
         } else if (0 > info[i]) {
             /* only info[0] shows if some input parameter is wrong.
              * If so, the error is CUSOLVER_STATUS_INVALID_VALUE.
@@ -238,12 +238,12 @@ int main(int argc, char **argv){
         }
     }
 
-    std::cout << "U\n";
-    print_matrix_colmaj(U, 4, 4, 4);
-    std::cout << "V\n";
-    print_matrix_colmaj(V, 4, 4, 4);
-    std::cout << "S\n";
-    print_matrix_rowmaj(S, 1, 4, 4);
+    // std::cout << "U\n";
+    // print_matrix_colmaj(U, 4, 4, 4);
+    // std::cout << "V\n";
+    // print_matrix_colmaj(V, 4, 4, 4);
+    // std::cout << "S\n";
+    // print_matrix_rowmaj(S, 1, 4, 4);
 
     mmd_batched_a100_best_param(false, U, S, inv, batchSize);
     cublasGemmStridedBatchedEx(
@@ -261,7 +261,7 @@ int main(int argc, char **argv){
 
 
     std::cout << "====================\nGemm from GPU\n";
-    print_matrix_rowmaj(inv, 4, 4, 4);
+    // print_matrix_rowmaj(inv, 8, 8, 8);
 
     // print_matrix_rowmaj(pyU, 4, 4, 4);
     // print_matrix_rowmaj(pyV, 4, 4, 4);
@@ -283,6 +283,7 @@ int main(int argc, char **argv){
     writebin("../out/U.bin", U, sizeof(float) * rows * cols);
     writebin("../out/V.bin", V, sizeof(float) * rows * cols);
     writebin("../out/S.bin", S, sizeof(float) * numTiles * TILE_DIM);
+    writebin("../out/inv.bin", inv, sizeof(float) * rows * cols);
 
     // print_matrix_colmaj(A, rows, cols, lda);
     // print_matrix_colmaj(U, rows, cols, lda);
