@@ -9,10 +9,10 @@ import time
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 32
-cols = 4
+rows = 2400
+cols = 2400
 
-wmlen = (rows // TILE) * (cols // TILE) // 8
+wmlen = (rows // TILE) * (cols // TILE)
 
 
 def tiled_svd(_A, _U, _S, _VT):
@@ -39,9 +39,10 @@ def tiled_gemm(A, U, S, VT, trans):
         np.copyto(A, A.T)
 
 
-rng = np.random.RandomState(42)
-A = np.array(rng.random(rows * cols)).reshape(rows, cols).astype(np.float32) * 50 + 260
-wm = np.array(range(1, wmlen + 1)).astype(np.uint8)
+rng = np.random.RandomState(1024)
+A = np.array(rng.random(rows * cols)).reshape(rows, cols).astype(np.float32) * 100 + 200
+# A = np.fromfile("../out/haar.bin", dtype=np.float32).reshape(rows, cols)
+wm = np.array(rng.randint(2, size=wmlen)).astype(np.uint8)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)

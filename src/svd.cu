@@ -133,7 +133,7 @@ void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *
         V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         &zero,
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        batchSize, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT
+        batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
     ));
 }
 
@@ -141,36 +141,36 @@ void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *
 __global__ void gpu_tiled_add_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmlen, size_t mod1){
     size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     for(; tile_id < batchSize; tile_id += blockDim.x){
-        int bbyt = wm[(tile_id / 8) % wmlen];
-        int bbit = bbyt & (1 << (tile_id % 8));
-        printf("(%lld): %d, %d, %d, %f\n", tile_id, bbit, bbyt, (1 << (tile_id % 8)), (S[tile_id * TILE_DIM] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1);
-        S[tile_id * TILE_DIM] = (S[tile_id * TILE_DIM] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1;
+        int bbyt = wm[tile_id % wmlen];
+        // printf("(%lld): %d, %d,%f\n", tile_id, bbyt, (1 << (tile_id % 8)), (S[tile_id * TILE_DIM] / mod1 + 0.25 + 0.5 * bbyt) * mod1);
+        S[tile_id * TILE_DIM] = (int(S[tile_id * TILE_DIM] / mod1) + 0.25 + 0.5 * bbyt) * mod1;
     }
 }
 
 
 void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
                                         size_t wmlen, size_t mod1, cudaStream_t stream){
-    dim3 dimGrid = dim3(1);
-    dim3 dimBlock = dim3(1);
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(512);
     gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1);
 }
 
 __global__ void gpu_tiled_get_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmlen, size_t mod1){
     size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     for(; tile_id < batchSize; tile_id += blockDim.x){
-        uint8_t bbit = (int(S[tile_id * TILE_DIM] + 0.5) % mod1 > mod1 / 2) * 1; 
-        bbit <<= (tile_id % 8);
-        printf("(%lld): %d, %d\n", tile_id, bbit, (1 << (tile_id % 8)));
-        wm[(tile_id / 8) % wmlen] |= bbit;
+        float elm = S[tile_id * TILE_DIM];
+        float xiaoshu = elm - int(elm);
+        int bbyt = int(int(elm) % mod1 + xiaoshu > mod1 / 2.); 
+        // printf("(%lld): %d, %d\n", tile_id, bbit, (1 << (tile_id % 8)));
+        wm[tile_id % wmlen] = bbyt;
     }
 }
 
 
 void tiled_get_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
                                         size_t wmlen, size_t mod1, cudaStream_t stream){
-    dim3 dimGrid = dim3(1);
-    dim3 dimBlock = dim3(1);
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(512);
     gpu_tiled_get_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1);
 }
 
@@ -191,7 +191,7 @@ int main(int argc, char **argv){
     int wmlen = atoi(argv[3]);
 
     float *A, *U, *S, *V, *inv;
-    int mod1 = 36;
+    int mod1 = 10;
     uint8_t *wm, *wmget;
     int *info;
 
@@ -215,11 +215,10 @@ int main(int argc, char **argv){
     int bb = myreadbin("../out/A.bin", A);
     bb = myreadbin("../out/wm.bin", wm);
     std::cout << "Read watermark\n";
-    for(int i = 0; i < wmlen; ++i){
-        wm[0] = 129;
-        std::cout << int(wm[i]) << ", ";
-    }
-    std::cout << "\n";
+    // for(int i = 0; i < wmlen; ++i){
+    //     std::cout << int(wm[i]) << ", ";
+    // }
+    // std::cout << "\n";
 
     CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(wmget, sizeof(uint8_t) * wmlen, device, stream));
@@ -237,11 +236,11 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaDeviceSynchronize());
 
     std::cout << "Before add wm\n";
-    print_matrix_rowmaj(S, 8, TILE_DIM, TILE_DIM);
+    print_matrix_rowmaj(S, 2, TILE_DIM, TILE_DIM);
     tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, stream);
     cudaDeviceSynchronize();
     std::cout << "After add wm\n";
-    print_matrix_rowmaj(S, 8, TILE_DIM, TILE_DIM);
+    print_matrix_rowmaj(S, 2, TILE_DIM, TILE_DIM);
     tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
 
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);
@@ -267,10 +266,10 @@ int main(int argc, char **argv){
     writebin("../out/inv.bin", inv, sizeof(float) * rows * cols);
     writebin("../out/wmget.bin", wmget, sizeof(uint8_t) * wmlen);
 
-    for(int i = 0; i < wmlen; ++i){
-        std::cout << int(wmget[i]) << ", ";
-    }
-    std::cout << "\n";
+    // for(int i = 0; i < wmlen; ++i){
+    //     std::cout << int(wmget[i]) << ", ";
+    // }
+    // std::cout << "\n";
 
     std::cout << "GPU computation " << computation << " ms\n";
     __TIMER_STOP__(end2end);
