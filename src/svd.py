@@ -9,8 +9,8 @@ import time
 np.set_printoptions(3, suppress=True)
 
 TILE = 4
-rows = 2800
-cols = 2800
+rows = 32
+cols = 4
 
 wmlen = (rows // TILE) * (cols // TILE) // 8
 
@@ -41,13 +41,15 @@ def tiled_gemm(A, U, S, VT, trans):
 
 rng = np.random.RandomState(42)
 A = np.array(rng.random(rows * cols)).reshape(rows, cols).astype(np.float32) * 50 + 260
-wm = rng.randint(0, 256, size=wmlen)
+wm = np.array(range(1, wmlen + 1)).astype(np.uint8)
 cpu_U = np.zeros_like(A)
 cpu_VT = np.zeros_like(A)
 cpu_S = np.zeros(rows * cols // TILE)
 A.tofile('../out/A.bin')
 wm.tofile('../out/wm.bin')
 
+wm = np.fromfile("../out/wm.bin", dtype=np.uint8)
+print(wm)
 print(A)
 
 subprocess.run("sh ../script/bwm.sh svd.cu".split()).check_returncode()
@@ -74,6 +76,8 @@ print(f"GPU vs CPU: {mean_squared_error(gpu_inv[slc, slc], cpu_inv[slc, slc])}")
 print(f"GPU vs Origin: {mean_squared_error(gpu_inv, A)}")
 print(f"CPU vs Origin: {mean_squared_error(cpu_inv, A)}")
 
-
+wmget = np.fromfile('../out/wmget.bin', dtype=np.uint8)
+print(wmget, wm)
+print(f"Extracted vs Origin: {mean_squared_error(wmget, wm)}")
 
 

@@ -138,38 +138,40 @@ void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *
 }
 
 
-__global__ void gpu_tiled_add_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmSize, size_t mod1){
+__global__ void gpu_tiled_add_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmlen, size_t mod1){
     size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     for(; tile_id < batchSize; tile_id += blockDim.x){
-        size_t bbyt = wm[(tile_id / 8) % wmSize];
+        int bbyt = wm[(tile_id / 8) % wmlen];
         int bbit = bbyt & (1 << (tile_id % 8));
-        S[tile_id] = (S[tile_id] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1;
+        printf("(%lld): %d, %d, %d, %f\n", tile_id, bbit, bbyt, (1 << (tile_id % 8)), (S[tile_id * TILE_DIM] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1);
+        S[tile_id * TILE_DIM] = (S[tile_id * TILE_DIM] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1;
     }
 }
 
 
 void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
-                                        size_t wmSize, size_t mod1, cudaStream_t stream){
-    dim3 dimGrid = dim3(512);
-    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
-    gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmSize, mod1);
+                                        size_t wmlen, size_t mod1, cudaStream_t stream){
+    dim3 dimGrid = dim3(1);
+    dim3 dimBlock = dim3(1);
+    gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1);
 }
 
-__global__ void gpu_tiled_get_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmSize, size_t mod1){
+__global__ void gpu_tiled_get_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmlen, size_t mod1){
     size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
     for(; tile_id < batchSize; tile_id += blockDim.x){
-        size_t bbyt = wm[(tile_id / 8) % wmSize];
-        int bbit = bbyt & (1 << (tile_id % 8));
-        S[tile_id] = (S[tile_id] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1;
+        uint8_t bbit = (int(S[tile_id * TILE_DIM] + 0.5) % mod1 > mod1 / 2) * 1; 
+        bbit <<= (tile_id % 8);
+        printf("(%lld): %d, %d\n", tile_id, bbit, (1 << (tile_id % 8)));
+        wm[(tile_id / 8) % wmlen] |= bbit;
     }
 }
 
 
 void tiled_get_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
-                                        size_t wmSize, size_t mod1, cudaStream_t stream){
-    dim3 dimGrid = dim3(512);
-    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
-    gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmSize, mod1);
+                                        size_t wmlen, size_t mod1, cudaStream_t stream){
+    dim3 dimGrid = dim3(1);
+    dim3 dimBlock = dim3(1);
+    gpu_tiled_get_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1);
 }
 
 
@@ -190,7 +192,7 @@ int main(int argc, char **argv){
 
     float *A, *U, *S, *V, *inv;
     int mod1 = 36;
-    uint8_t *wm;
+    uint8_t *wm, *wmget;
     int *info;
 
     cudaStream_t stream = NULL;
@@ -199,12 +201,11 @@ int main(int argc, char **argv){
     gesvdjInfo_t gesvdParams;
     int lwork;
     float *work;
-    size_t wmSize = 1;
-    size_t batchSize = (rows / TILE_DIM) * (cols / TILE_DIM);
     size_t numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
-    CUDA_CHECK(cudaMallocManaged(&wm, sizeof(uint8_t) * wmSize));
-    CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
+    CUDA_CHECK(cudaMallocManaged(&wm, sizeof(uint8_t) * wmlen));
+    CUDA_CHECK(cudaMallocManaged(&wmget, sizeof(uint8_t) * wmlen));
+    CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * numTiles));
     CUDA_CHECK(cudaMallocManaged(&A, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&U, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&V, sizeof(float) * rows * cols));
@@ -213,30 +214,43 @@ int main(int argc, char **argv){
 
     int bb = myreadbin("../out/A.bin", A);
     bb = myreadbin("../out/wm.bin", wm);
+    std::cout << "Read watermark\n";
+    for(int i = 0; i < wmlen; ++i){
+        wm[0] = 129;
+        std::cout << int(wm[i]) << ", ";
+    }
+    std::cout << "\n";
 
-    CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmSize, device, stream));
-    CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * batchSize, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(wmget, sizeof(uint8_t) * wmlen, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * numTiles, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(A, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(U, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(V, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(S, sizeof(float) * numTiles * TILE_DIM, device, stream));
 
-    init_cudalib(&solverHandle, &blasHandle, batchSize, A, U, S, V, &work, &lwork, &gesvdParams, stream);
+    init_cudalib(&solverHandle, &blasHandle, numTiles, A, U, S, V, &work, &lwork, &gesvdParams, stream);
     std::cout << "Allocated " << lwork << " float buffer for gesvd\n";
 
     __TIMER_START__(computation);
-    gesvd_a100_best_param(solverHandle, batchSize, A, U, S, V, work, lwork, info, gesvdParams);
+    gesvd_a100_best_param(solverHandle, numTiles, A, U, S, V, work, lwork, info, gesvdParams);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    tiled_add_wm_a100_bestparam(batchSize, S, wm, wmSize, mod1, stream);
+    std::cout << "Before add wm\n";
+    print_matrix_rowmaj(S, 8, TILE_DIM, TILE_DIM);
+    tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, stream);
+    cudaDeviceSynchronize();
+    std::cout << "After add wm\n";
+    print_matrix_rowmaj(S, 8, TILE_DIM, TILE_DIM);
+    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
 
-    mmd_batched_a100_best_param(false, U, S, inv, batchSize);
-    invsvd_a100_best_param(blasHandle, batchSize, inv, U, S, V);
+    mmd_batched_a100_best_param(false, U, S, inv, numTiles);
+    invsvd_a100_best_param(blasHandle, numTiles, inv, U, S, V);
     cudaDeviceSynchronize();
     __TIMER_STOP__(computation);
 
 
-    for(int i = 0; i < batchSize; ++i){
+    for(int i = 0; i < numTiles; ++i){
         if (0 == info[i]) {
             // std::printf("matrix %d: gesvdj converges \n", i);
         } else if (0 > info[i]) {
@@ -251,6 +265,12 @@ int main(int argc, char **argv){
     // print_matrix_rowmaj(inv, 8, 8, 8);
 
     writebin("../out/inv.bin", inv, sizeof(float) * rows * cols);
+    writebin("../out/wmget.bin", wmget, sizeof(uint8_t) * wmlen);
+
+    for(int i = 0; i < wmlen; ++i){
+        std::cout << int(wmget[i]) << ", ";
+    }
+    std::cout << "\n";
 
     std::cout << "GPU computation " << computation << " ms\n";
     __TIMER_STOP__(end2end);

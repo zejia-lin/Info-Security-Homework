@@ -85,12 +85,13 @@ void print_matrix_colmaj(float *A, int rows, int cols, int lda){
     printf("]\n\n");
 }
 
-void print_matrix_rowmaj(float *A, int rows, int cols, int lda){
+template<typename T>
+void print_matrix_rowmaj(T *A, int rows, int cols, int lda){
     printf("[");
     for(int i = 0; i < rows; ++i){
         printf("[");
         for(int j = 0; j < cols; ++j){
-            printf("%.3f, ", A[IDX(i, j, lda)]);
+            printf("%.7f, ", A[IDX(i, j, lda)]);
         }
         printf("]");
         if(i != rows - 1){
