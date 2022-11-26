@@ -138,6 +138,41 @@ void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *
 }
 
 
+__global__ void gpu_tiled_add_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmSize, size_t mod1){
+    size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
+    for(; tile_id < batchSize; tile_id += blockDim.x){
+        size_t bbyt = wm[(tile_id / 8) % wmSize];
+        int bbit = bbyt & (1 << (tile_id % 8));
+        S[tile_id] = (S[tile_id] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1;
+    }
+}
+
+
+void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
+                                        size_t wmSize, size_t mod1, cudaStream_t stream){
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmSize, mod1);
+}
+
+__global__ void gpu_tiled_get_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmSize, size_t mod1){
+    size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
+    for(; tile_id < batchSize; tile_id += blockDim.x){
+        size_t bbyt = wm[(tile_id / 8) % wmSize];
+        int bbit = bbyt & (1 << (tile_id % 8));
+        S[tile_id] = (S[tile_id] / mod1 + 1 / 4 + 1 / 2 * bbit) * mod1;
+    }
+}
+
+
+void tiled_get_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
+                                        size_t wmSize, size_t mod1, cudaStream_t stream){
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmSize, mod1);
+}
+
+
 
 int main(int argc, char **argv){
 
@@ -151,8 +186,11 @@ int main(int argc, char **argv){
 
     int rows = atoi(argv[1]);
     int cols = atoi(argv[2]);
+    int wmlen = atoi(argv[3]);
 
     float *A, *U, *S, *V, *inv;
+    int mod1 = 36;
+    uint8_t *wm;
     int *info;
 
     cudaStream_t stream = NULL;
@@ -161,11 +199,11 @@ int main(int argc, char **argv){
     gesvdjInfo_t gesvdParams;
     int lwork;
     float *work;
-    int batchSize = (rows / TILE_DIM) * (cols / TILE_DIM);
-    int numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
-    const float one = 1, zero = 0;
+    size_t wmSize = 1;
+    size_t batchSize = (rows / TILE_DIM) * (cols / TILE_DIM);
+    size_t numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
-
+    CUDA_CHECK(cudaMallocManaged(&wm, sizeof(uint8_t) * wmSize));
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * batchSize));
     CUDA_CHECK(cudaMallocManaged(&A, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&U, sizeof(float) * rows * cols));
@@ -174,7 +212,9 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMallocManaged(&S, sizeof(float) * numTiles * TILE_DIM));
 
     int bb = myreadbin("../out/A.bin", A);
+    bb = myreadbin("../out/wm.bin", wm);
 
+    CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmSize, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * batchSize, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(A, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(U, sizeof(float) * rows * cols, device, stream));
@@ -187,6 +227,8 @@ int main(int argc, char **argv){
     __TIMER_START__(computation);
     gesvd_a100_best_param(solverHandle, batchSize, A, U, S, V, work, lwork, info, gesvdParams);
     CUDA_CHECK(cudaDeviceSynchronize());
+
+    tiled_add_wm_a100_bestparam(batchSize, S, wm, wmSize, mod1, stream);
 
     mmd_batched_a100_best_param(false, U, S, inv, batchSize);
     invsvd_a100_best_param(blasHandle, batchSize, inv, U, S, V);
