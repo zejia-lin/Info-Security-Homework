@@ -53,7 +53,7 @@ wm = np.fromfile("../out/wm.bin", dtype=np.uint8)
 print(wm)
 print(A)
 
-subprocess.run("sh ../script/bwm.sh svd.cu".split()).check_returncode()
+subprocess.run("sh ../script/bwm.sh ../test/test_svd.cu".split(), cwd='../test').check_returncode()
 subprocess.run(f"../build/svd {rows} {cols} {wmlen}".split())
 
 st = time.time()
