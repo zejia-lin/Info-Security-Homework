@@ -1,6 +1,6 @@
 
-#pragma once
-// #define TEST_DCT
+// #pragma once
+#define TEST_DCT
 
 #include "myutils.cpp"
 #include "constants.h"
@@ -189,7 +189,6 @@ void idct_a100_best_param(int rows, int cols, const float *A, int lda, float *re
 
 int main(int argc, char **argv) {
 
-    uint64_t compute_time, prefetch_time;
     size_t N = atoll(argv[1]);
     // float A[N * N];//, res[N * N];
     // for (size_t i = 0; i < N * N; ++i) {
@@ -213,7 +212,7 @@ int main(int argc, char **argv) {
 
     // print_matrix_rowmaj(dA, N + 1, N, N + 1);
 
-    __TIMER_START__
+    __TIMER_START__(prefetch_time)
     cudaMemPrefetchAsync(dA, sizeof(float) * N * N, 0);
     cudaDeviceSynchronize();
     __TIMER_STOP__(prefetch_time)
@@ -223,15 +222,15 @@ int main(int argc, char **argv) {
     // ================================================DCT================================================
     // ====================================================================================================
     for(int _iter = 0; _iter < 1; ++_iter){
-        __TIMER_START__
+        __TIMER_START__(dct_time)
         dct_a100_best_param(N, N, dA, N + 1, dRes, N + 1);
         cudaDeviceSynchronize();
-        __TIMER_STOP__(compute_time);
+        __TIMER_STOP__(dct_time);
         auto err = cudaGetLastError();
         if(err != cudaSuccess){
             std::cout << cudaGetErrorString(err) << std::endl;
         }
-        std::cout << "DCT GPU time " << double(compute_time) / 1000. << " ms\n";
+        std::cout << "DCT GPU time " << double(dct_time) / 1000. << " ms\n";
     }
 
     writebin("../out/gpu_dct.bin", dRes, sizeof(float) * (N + 1) * N);
@@ -240,15 +239,15 @@ int main(int argc, char **argv) {
     // ================================================IDCT================================================
     // =====================================================================================================
     for(int _iter = 0; _iter < 1; ++_iter){
-        __TIMER_START__
+        __TIMER_START__(idct_time)
         idct_a100_best_param(N, N, dRes, N + 1, dA, N + 1);
         cudaDeviceSynchronize();
-        __TIMER_STOP__(compute_time);
+        __TIMER_STOP__(idct_time);
         auto err = cudaGetLastError();
         if(err != cudaSuccess){
             std::cout << cudaGetErrorString(err) << std::endl;
         }
-        std::cout << "IDCT GPU time " << double(compute_time) / 1000. << " ms\n";
+        std::cout << "IDCT GPU time " << double(idct_time) / 1000. << " ms\n";
     }
     writebin("../out/gpu_idct.bin", dA, sizeof(float) * (N + 1) * N);
 

@@ -22,8 +22,7 @@ ed_time = time.time()
 
 print("Finish CPU dct")
 
-subprocess.run(f"nvcc -O3 mydct.cu -o ../build/mydct".split()).check_returncode()
-subprocess.run(f"../build/mydct {N}".split()).check_returncode()
+subprocess.run(f"sh ../script/run.sh mydct.cu {N}".split()).check_returncode()
 
 print(f"CPU time: {(ed_time - st_time) * 1000} ms")
 
