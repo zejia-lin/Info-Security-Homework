@@ -54,7 +54,7 @@ print(wm)
 print(A)
 
 subprocess.run("sh ../script/bwm.sh ../test/test_svd.cu".split(), cwd='../test').check_returncode()
-subprocess.run(f"../build/svd {rows} {cols} {wmlen}".split())
+subprocess.run(f"../build/test_svd {rows} {cols} {wmlen}".split())
 
 st = time.time()
 tiled_svd(A, cpu_U, cpu_S, cpu_VT)

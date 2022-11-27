@@ -18,8 +18,8 @@ int main(int argc, char **argv){
     int wmlen = atoi(argv[3]);
 
     float *A, *U, *S, *V, *inv, *dct;
-    int mod1 = 2;
-    uint8_t *wm;
+    int mod1 = 10;
+    uint8_t *wm, *wmget;
     int *info;
 
     cudaStream_t stream = NULL;
@@ -31,6 +31,7 @@ int main(int argc, char **argv){
     size_t numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
     CUDA_CHECK(cudaMallocManaged(&wm, sizeof(uint8_t) * wmlen));
+    CUDA_CHECK(cudaMallocManaged(&wmget, sizeof(uint8_t) * wmlen));
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * numTiles));
     CUDA_CHECK(cudaMallocManaged(&A, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&dct, sizeof(float) * rows * cols));
@@ -45,13 +46,13 @@ int main(int argc, char **argv){
     size_t filesize;
     readbin("../out/haar.bin", &filesize, A, sizeof(float) * rows * cols);
     print_matrix_rowmaj(A, 1, 16, 16);
-    readbin("../out/wm.bin", &filesize, wm, sizeof(uint8_t) * wmlen);
+    int bb = myreadbin("../out/wm.bin", wm);
     print_matrix_rowmaj(A, 1, 16, 16);
     std::cout << "Read watermark\n";
-    // for(int i = 0; i < wmlen; ++i){
-    //     std::cout << int(wm[i]) << ", ";
-    // }
-    // std::cout << "\n";
+    for(int i = 0; i < wmlen; ++i){
+        std::cout << int(wm[i]) << ", ";
+    }
+    std::cout << "\n";
 
     CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * numTiles, device, stream));
@@ -79,6 +80,8 @@ int main(int argc, char **argv){
     std::cout << "After add wm\n";
     print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
 
+    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
+
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);
     invsvd_a100_best_param(blasHandle, numTiles, inv, U, S, V);
     idct_a100_best_param(rows, cols, inv, cols, A, cols, stream);
@@ -101,6 +104,7 @@ int main(int argc, char **argv){
     // print_matrix_rowmaj(inv, 8, 8, 8);
 
     writebin("../out/embeded.bin", A, sizeof(float) * rows * cols);
+    writebin("../out/wmget.bin", wmget, sizeof(uint8_t) * wmlen);
 
     // for(int i = 0; i < wmlen; ++i){
     //     std::cout << int(wmget[i]) << ", ";

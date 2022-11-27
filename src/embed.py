@@ -7,7 +7,7 @@ import time
 from pywt import dwt2, idwt2
 
 img = cv2.imread('../pic/lena.png')
-wm = cv2.imread('../pic/wm2.png').astype(np.float32)
+wm = cv2.imread('../pic/wm2.png').astype(np.uint8)
 ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
 img_shape = img.shape[:2]
@@ -21,6 +21,7 @@ for channel in range(3):
     ca[channel], hvd[channel] = dwt2(img_YUV[:, :, channel], 'haar')
 
 ca[0].astype(np.float32).tofile('../out/haar.bin')
+(wm > 128).astype(np.uint8).tofile('../out/wm.bin')
 print("CA[0]\n========================\n", ca[0])
 
 subprocess.run("sh ../script/bwm.sh ../test/embed.cu".split()).check_returncode()
