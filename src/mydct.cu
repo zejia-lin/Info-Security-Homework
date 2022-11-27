@@ -1,6 +1,6 @@
 
-// #pragma once
-#define TEST_DCT
+#pragma once
+// #define TEST_DCT
 
 #include "myutils.cpp"
 #include "constants.h"
@@ -112,7 +112,7 @@ __global__ void dct_gpu(int rows, int cols, const float *A, int lda, float *res,
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
         float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * ldres + threadIdx.z];
-        // printf("(%d, %d, %d): %d\n", tile_id, threadIdx.y, threadIdx.z, tile_offset_to_A + threadIdx.y * ldres + threadIdx.z);
+        // printf("(%d, %d, %d): %f\n", tile_id, threadIdx.y, threadIdx.z, A[tile_offset_to_A + threadIdx.y * ldres + threadIdx.z]);
 
         dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
     }
@@ -174,6 +174,7 @@ void dct_a100_best_param(int rows, int cols, const float *A, int lda, float *res
     dim3 dimGrid = dim3(512);
     dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
     size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
+    print_matrix_rowmaj(A, 1, 16, lda);
     dct_gpu<<<dimGrid, dimBlock, smemSize, stream>>>(rows, cols, A, lda, res, ldres);
 }
 
