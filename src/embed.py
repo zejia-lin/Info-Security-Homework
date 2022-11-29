@@ -24,7 +24,7 @@ ca[0].astype(np.float32).tofile('../out/haar.bin')
 wm.tofile('../out/wm.bin')
 print("CA[0]\n========================\n", ca[0])
 
-subprocess.run("sh ../script/bwm.sh ../test/embed.cu".split()).check_returncode()
+subprocess.run("sh ../script/bwm.sh ../test/embed.cu".split(), cwd='../test').check_returncode()
 subprocess.run(f"../build/embed {ca_shape[0]} {ca_shape[1]} {wmlen}".split())
 
 embeded = np.fromfile("../out/embeded.bin", dtype=np.float32).reshape(hvd[0][0].shape)

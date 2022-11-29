@@ -1,6 +1,6 @@
 
-#include "svd.cu"
-#include "mydct.cu"
+#include "../src/svd.cu"
+#include "../src/mydct.cu"
 
 
 int main(int argc, char **argv){
