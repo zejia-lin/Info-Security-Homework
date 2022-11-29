@@ -12,7 +12,7 @@ TILE = 4
 rows = 2400
 cols = 2400
 
-wmlen = (rows // TILE) * (cols // TILE)
+wmlen = (rows // TILE) * (cols // TILE) // 10
 
 
 def tiled_svd(_A, _U, _S, _VT):

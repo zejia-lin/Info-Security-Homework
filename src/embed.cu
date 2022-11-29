@@ -49,9 +49,9 @@ int main(int argc, char **argv){
     int bb = myreadbin("../out/wm.bin", wm);
     print_matrix_rowmaj(A, 1, 16, 16);
     std::cout << "Read watermark\n";
-    for(int i = 0; i < wmlen; ++i){
-        std::cout << int(wm[i]) << ", ";
-    }
+    // for(int i = 0; i < wmlen; ++i){
+    //     std::cout << int(wm[i]) << ", ";
+    // }
     std::cout << "\n";
 
     CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
