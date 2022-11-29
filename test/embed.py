@@ -6,8 +6,8 @@ import subprocess
 import time
 from pywt import dwt2, idwt2
 
-img = cv2.imread('../pic/rabbit.jpeg')
-wm = (cv2.cvtColor(cv2.imread('../pic/wm2.png'), cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
+img = cv2.imread('../pic/lena9.png')
+wm = (cv2.cvtColor(cv2.imread('../pic/wm.png'), cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
 ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
 img_shape = img.shape[:2]
@@ -41,8 +41,7 @@ wmget_bin = (wmget > 0.5).astype(np.uint8) * 255
 cv2.imwrite("../out/embeded.png", embed_img)
 cv2.imwrite("../out/origin.png", wm * 255)
 cv2.imwrite("../out/wmget.png", wmget * 255)
-
-print(wmget.shape, wm.shape)
+cv2.imwrite("../out/wmget_bin.png", wmget_bin)
 
 print(f"MSE: {mean_squared_error(wmget_bin, wm * 255)}")
 print(f"SSIM: {ssim(wmget_bin, wm * 255)}")

@@ -53,6 +53,7 @@ int main(int argc, char **argv){
     std::cout << "\n";
 
     CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(wmget, sizeof(float) * wmlen, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * numTiles, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(A, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(dct, sizeof(float) * rows * cols, device, stream));
@@ -74,9 +75,6 @@ int main(int argc, char **argv){
     std::cout << "Before add wm\n";
     print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
     tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
-    cudaDeviceSynchronize();
-    std::cout << "After add wm\n";
-    print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
 
 
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);
@@ -100,7 +98,7 @@ int main(int argc, char **argv){
     // std::cout << "====================\nGemm from GPU\n";
     // print_matrix_rowmaj(inv, 8, 8, 8);
 
-    writebin("../out/embeded.bin", A, sizeof(float) * rows * cols);
+    // writebin("../out/embeded.bin", A, sizeof(float) * rows * cols);
     writebin("../out/wmget.bin", wmget, sizeof(float) * wmlen);
 
     // for(int i = 0; i < wmlen; ++i){

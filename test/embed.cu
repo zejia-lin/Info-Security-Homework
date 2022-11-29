@@ -72,12 +72,12 @@ int main(int argc, char **argv){
     gesvd_a100_best_param(solverHandle, numTiles, dct, U, S, V, work, lwork, info, gesvdParams);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    // std::cout << "Before add wm\n";
-    // print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
+    std::cout << "Before add wm\n";
+    print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
     tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, stream);
     cudaDeviceSynchronize();
-    // std::cout << "After add wm\n";
-    // print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
+    std::cout << "After add wm\n";
+    print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
 
     tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
 

@@ -28,10 +28,11 @@ subprocess.run("sh ../script/bwm.sh ../test/extract.cu".split(), cwd='../test').
 subprocess.run(f"../build/extract {ca_shape[0]} {ca_shape[1]} {wmlen}".split())
 
 wmget = np.fromfile('../out/wmget.bin', dtype=np.float32).reshape(wm.shape)
+wmget_bin = (wmget > 0.5).astype(np.uint8) * 255
 
 cv2.imwrite("../out/origin.png", wm * 255)
 cv2.imwrite("../out/wmget.png", wmget * 255)
+cv2.imwrite("../out/wmget_bin.png", wmget_bin)
 
-print(wmget.shape, wm.shape)
-
-print(f"Extract vs origin: {mean_squared_error(wmget, wm)}")
+print(f"MSE: {mean_squared_error(wmget_bin, wm * 255)}")
+print(f"SSIM: {ssim(wmget_bin, wm * 255)}")
