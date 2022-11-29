@@ -42,9 +42,11 @@ int main(int argc, char **argv){
     init_cudalib(&solverHandle, &blasHandle, numTiles, A, U, S, V, &work, &lwork, &gesvdParams, stream);
     std::cout << "Allocated " << lwork << " float buffer for gesvd\n";
 
-    int bb = myreadbin("../out/haar.bin", A);
+    // int bb = myreadbin("../out/haar.bin", A);
+    size_t filesize;
+    readbin("../out/haar.bin", &filesize, A, sizeof(float) * rows * cols);
     print_matrix_rowmaj(A, 1, 16, 16);
-    bb = myreadbin("../out/wm.bin", wm);
+    int bb = myreadbin("../out/wm.bin", wm);
     print_matrix_rowmaj(A, 1, 16, 16);
     std::cout << "Read watermark\n";
     // for(int i = 0; i < wmlen; ++i){
@@ -73,12 +75,11 @@ int main(int argc, char **argv){
 
     std::cout << "Before add wm\n";
     print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
-    tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, stream);
+    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
     cudaDeviceSynchronize();
     std::cout << "After add wm\n";
     print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
 
-    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
 
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);
     invsvd_a100_best_param(blasHandle, numTiles, inv, U, S, V);
