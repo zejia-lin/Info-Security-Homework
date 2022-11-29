@@ -155,19 +155,26 @@ void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm,
     gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1);
 }
 
-__global__ void gpu_tiled_get_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmlen, size_t mod1){
-    size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    for(; tile_id < batchSize; tile_id += blockDim.x){
+__global__ void gpu_tiled_get_wm(size_t batchSize, float *S, float *wm, size_t wmlen, size_t mod1){
+    for(size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x; tile_id < batchSize; tile_id += blockDim.x){
         float elm = S[tile_id * TILE_DIM];
         float xiaoshu = elm - int(elm);
-        int bbyt = int(int(elm) % mod1 + xiaoshu > mod1 / 2.); 
-        // printf("(%lld): %d, %d\n", tile_id, bbit, (1 << (tile_id % 8)));
+        int bbyt = bool((int(elm) % mod1 + xiaoshu) > (mod1 / 2.));
         wm[tile_id % wmlen] = bbyt;
     }
+    // size_t basecnt = (batchSize - 1) / wmlen + 1;
+    // size_t numextra = batchSize - batchSize % wmlen;
+    // for(size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < wmlen; tid += blockDim.x){
+    //     if(tid < numextra){
+    //         wm[tid] /= float(basecnt);
+    //     } else {
+    //         wm[tid] /= float(basecnt - 1);
+    //     }
+    // }
 }
 
 
-void tiled_get_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm, 
+void tiled_get_wm_a100_bestparam(size_t batchSize, float *S, float *wm, 
                                         size_t wmlen, size_t mod1, cudaStream_t stream){
     dim3 dimGrid = dim3(512);
     dim3 dimBlock = dim3(512);

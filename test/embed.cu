@@ -17,9 +17,9 @@ int main(int argc, char **argv){
     int cols = atoi(argv[2]);
     int wmlen = atoi(argv[3]);
 
-    float *A, *U, *S, *V, *inv, *dct;
-    int mod1 = 10;
-    uint8_t *wm, *wmget;
+    float *A, *U, *S, *V, *inv, *dct, *wmget;
+    int mod1 = 37;
+    uint8_t *wm;
     int *info;
 
     cudaStream_t stream = NULL;
@@ -31,7 +31,7 @@ int main(int argc, char **argv){
     size_t numTiles = (rows / TILE_DIM) * (cols / TILE_DIM);
 
     CUDA_CHECK(cudaMallocManaged(&wm, sizeof(uint8_t) * wmlen));
-    CUDA_CHECK(cudaMallocManaged(&wmget, sizeof(uint8_t) * wmlen));
+    CUDA_CHECK(cudaMallocManaged(&wmget, sizeof(float) * wmlen));
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * numTiles));
     CUDA_CHECK(cudaMallocManaged(&A, sizeof(float) * rows * cols));
     CUDA_CHECK(cudaMallocManaged(&dct, sizeof(float) * rows * cols));
@@ -102,7 +102,7 @@ int main(int argc, char **argv){
     // print_matrix_rowmaj(inv, 8, 8, 8);
 
     writebin("../out/embeded.bin", A, sizeof(float) * rows * cols);
-    writebin("../out/wmget.bin", wmget, sizeof(uint8_t) * wmlen);
+    writebin("../out/wmget.bin", wmget, sizeof(float) * wmlen);
 
     // for(int i = 0; i < wmlen; ++i){
     //     std::cout << int(wmget[i]) << ", ";
