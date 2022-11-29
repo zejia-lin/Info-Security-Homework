@@ -6,7 +6,7 @@ import subprocess
 import time
 from pywt import dwt2, idwt2
 
-img = cv2.imread('../pic/lena.png')
+img = cv2.imread('../pic/rabbit.jpeg')
 wm = (cv2.cvtColor(cv2.imread('../pic/wm2.png'), cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
 ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 

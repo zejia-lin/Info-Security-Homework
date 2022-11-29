@@ -16,7 +16,7 @@ wmlen = wm.shape[0] * wm.shape[1]
 img_YUV = cv2.copyMakeBorder(cv2.cvtColor(img, cv2.COLOR_BGR2YUV),
                                     0, img.shape[0] % 2, 0, img.shape[1] % 2,
                                     cv2.BORDER_CONSTANT, value=(0, 0, 0))
-ca_shape = (img_YUV.shape[0] / 2, img_YUV.shape[1] / 2)
+ca_shape = (img_YUV.shape[0] // 2, img_YUV.shape[1] // 2)
 for channel in range(3):
     ca[channel], hvd[channel] = dwt2(img_YUV[:, :, channel], 'haar')
 

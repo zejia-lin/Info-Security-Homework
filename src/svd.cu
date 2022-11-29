@@ -160,9 +160,12 @@ __global__ void gpu_tiled_get_wm(size_t batchSize, float *S, float *wm, size_t w
         float elm = S[tile_id * TILE_DIM];
         float xiaoshu = elm - int(elm);
         int bbyt = bool((int(elm) % mod1 + xiaoshu) > (mod1 / 2.));
-        wm[tile_id % wmlen] += bbyt;
+        float added = wm[tile_id % wmlen] + bbyt;
+        printf("(%llu, %f, %d, %f), ", tile_id % wmlen, wm[tile_id % wmlen], bbyt, added);
+        wm[tile_id % wmlen] = added;
+        __syncthreads();
     }
-    size_t basecnt = (batchSize - 1) / wmlen + 1;
+    size_t basecnt = (batchSize + wmlen - 1) / wmlen;
     size_t numextra = batchSize - batchSize % wmlen;
     if(threadIdx.x == 0 && blockIdx.x == 0){
         printf("%llu, %llu, %llu, %llu\n", numextra, basecnt, batchSize, wmlen);
