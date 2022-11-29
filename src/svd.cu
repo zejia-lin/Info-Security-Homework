@@ -155,32 +155,30 @@ void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm,
     gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1);
 }
 
-__global__ void gpu_tiled_get_wm(size_t batchSize, float *S, float *wm, size_t wmlen, size_t mod1){
-    for(size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x; tile_id < batchSize; tile_id += blockDim.x * gridDim.x){
-        float elm = S[tile_id * TILE_DIM];
-        float xiaoshu = elm - int(elm);
-        int bbyt = bool((int(elm) % mod1 + xiaoshu) > (mod1 / 2.));
-        float added = wm[tile_id % wmlen] + bbyt;
-        printf("(%llu, %f, %d, %f), ", tile_id % wmlen, wm[tile_id % wmlen], bbyt, added);
-        wm[tile_id % wmlen] = added;
-        __syncthreads();
-    }
+__global__ void gpu_tiled_get_wm(size_t batchSize, const float *S, float *wm, size_t wmlen, size_t mod1){
+
     size_t basecnt = (batchSize + wmlen - 1) / wmlen;
     size_t numextra = batchSize - batchSize % wmlen;
-    if(threadIdx.x == 0 && blockIdx.x == 0){
-        printf("%llu, %llu, %llu, %llu\n", numextra, basecnt, batchSize, wmlen);
-    }
+
     for(size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < wmlen; tid += blockDim.x * gridDim.x){
-        if(tid < numextra){
-            wm[tid] /= float(basecnt);
-        } else {
-            wm[tid] /= float(basecnt - 1);
+        float acc = 0;
+        for(int i = tid; i < batchSize; i += wmlen){
+            float elm = S[i * TILE_DIM];
+            float xiaoshu = elm - int(elm);
+            bool bbyt = bool((int(elm) % mod1 + xiaoshu) > (mod1 / 2.));
+            acc += bbyt;
         }
+        if(tid < numextra){
+            acc /= float(basecnt);
+        } else {
+            acc /= float(basecnt - 1);
+        }
+        wm[tid] = acc;
     }
 }
 
 
-void tiled_get_wm_a100_bestparam(size_t batchSize, float *S, float *wm, 
+void tiled_get_wm_a100_bestparam(size_t batchSize, const float *S, float *wm, 
                                         size_t wmlen, size_t mod1, cudaStream_t stream){
     dim3 dimGrid = dim3(512);
     dim3 dimBlock = dim3(512);

@@ -53,6 +53,7 @@ int main(int argc, char **argv){
     std::cout << "\n";
 
     CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(wmget, sizeof(float) * wmlen, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * numTiles, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(A, sizeof(float) * rows * cols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(dct, sizeof(float) * rows * cols, device, stream));
@@ -85,6 +86,7 @@ int main(int argc, char **argv){
     idct_a100_best_param(rows, cols, inv, cols, A, cols, stream);
     cudaDeviceSynchronize();
     __TIMER_STOP__(computation);
+
 
 
     for(int i = 0; i < numTiles; ++i){

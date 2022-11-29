@@ -36,6 +36,7 @@ embed_img = cv2.cvtColor(embed_img_YUV, cv2.COLOR_YUV2BGR)
 embed_img = np.clip(embed_img, a_min=0, a_max=255)
 
 wmget = np.fromfile('../out/wmget.bin', dtype=np.float32).reshape(wm.shape)
+wmget_bin = (wmget > 0.5).astype(np.uint8) * 255
 
 cv2.imwrite("../out/embeded.png", embed_img)
 cv2.imwrite("../out/origin.png", wm * 255)
@@ -43,4 +44,5 @@ cv2.imwrite("../out/wmget.png", wmget * 255)
 
 print(wmget.shape, wm.shape)
 
-print(f"Extract vs origin: {mean_squared_error((wmget * 255).astype(np.uint8), wm * 255)}")
+print(f"MSE: {mean_squared_error(wmget_bin, wm * 255)}")
+print(f"SSIM: {ssim(wmget_bin, wm * 255)}")
