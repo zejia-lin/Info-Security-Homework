@@ -140,7 +140,7 @@ void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *
 
 __global__ void gpu_tiled_add_wm(size_t batchSize, float *S, uint8_t *wm, size_t wmlen, size_t mod1){
     size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x;
-    for(; tile_id < batchSize; tile_id += blockDim.x){
+    for(; tile_id < batchSize; tile_id += blockDim.x * gridDim.x){
         int bbyt = wm[tile_id % wmlen];
         // printf("(%lld): %d, %d,%f\n", tile_id, bbyt, (1 << (tile_id % 8)), (S[tile_id * TILE_DIM] / mod1 + 0.25 + 0.5 * bbyt) * mod1);
         S[tile_id * TILE_DIM] = (int(S[tile_id * TILE_DIM] / mod1) + 0.25 + 0.5 * bbyt) * mod1;
@@ -156,21 +156,24 @@ void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm,
 }
 
 __global__ void gpu_tiled_get_wm(size_t batchSize, float *S, float *wm, size_t wmlen, size_t mod1){
-    for(size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x; tile_id < batchSize; tile_id += blockDim.x){
+    for(size_t tile_id = threadIdx.x + blockIdx.x * blockDim.x; tile_id < batchSize; tile_id += blockDim.x * gridDim.x){
         float elm = S[tile_id * TILE_DIM];
         float xiaoshu = elm - int(elm);
         int bbyt = bool((int(elm) % mod1 + xiaoshu) > (mod1 / 2.));
-        wm[tile_id % wmlen] = bbyt;
+        wm[tile_id % wmlen] += bbyt;
     }
-    // size_t basecnt = (batchSize - 1) / wmlen + 1;
-    // size_t numextra = batchSize - batchSize % wmlen;
-    // for(size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < wmlen; tid += blockDim.x){
-    //     if(tid < numextra){
-    //         wm[tid] /= float(basecnt);
-    //     } else {
-    //         wm[tid] /= float(basecnt - 1);
-    //     }
-    // }
+    size_t basecnt = (batchSize - 1) / wmlen + 1;
+    size_t numextra = batchSize - batchSize % wmlen;
+    if(threadIdx.x == 0 && blockIdx.x == 0){
+        printf("%llu, %llu, %llu, %llu\n", numextra, basecnt, batchSize, wmlen);
+    }
+    for(size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < wmlen; tid += blockDim.x * gridDim.x){
+        if(tid < numextra){
+            wm[tid] /= float(basecnt);
+        } else {
+            wm[tid] /= float(basecnt - 1);
+        }
+    }
 }
 
 

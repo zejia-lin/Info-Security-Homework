@@ -43,10 +43,10 @@ int main(int argc, char **argv){
     std::cout << "Allocated " << lwork << " float buffer for gesvd\n";
 
     int bb = myreadbin("../out/haar.bin", A);
-    print_matrix_rowmaj(A, 1, 16, 16);
+    // print_matrix_rowmaj(A, 1, 16, 16);
     bb = myreadbin("../out/wm.bin", wm);
-    print_matrix_rowmaj(A, 1, 16, 16);
-    std::cout << "Read watermark\n";
+    // print_matrix_rowmaj(A, 1, 16, 16);
+    // std::cout << "Read watermark\n";
     // for(int i = 0; i < wmlen; ++i){
     //     std::cout << int(wm[i]) << ", ";
     // }
@@ -62,7 +62,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaDeviceSynchronize());
 
 
-    print_matrix_rowmaj(A, 1, 16, rows);
+    // print_matrix_rowmaj(A, 1, 16, rows);
     __TIMER_START__(computation);
     dct_a100_best_param(rows, cols, A, cols, dct, cols, stream);
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -71,12 +71,12 @@ int main(int argc, char **argv){
     gesvd_a100_best_param(solverHandle, numTiles, dct, U, S, V, work, lwork, info, gesvdParams);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    std::cout << "Before add wm\n";
-    print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
+    // std::cout << "Before add wm\n";
+    // print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
     tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, stream);
     cudaDeviceSynchronize();
-    std::cout << "After add wm\n";
-    print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
+    // std::cout << "After add wm\n";
+    // print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
 
     tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
 
