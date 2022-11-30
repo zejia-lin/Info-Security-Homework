@@ -133,7 +133,7 @@ void invsvd_a100_best_param(cublasHandle_t blasHandle, size_t batchSize, float *
         V, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
         &zero,
         inv, CUDA_R_32F, TILE_DIM, TILE_DIM * TILE_DIM,
-        batchSize, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
+        batchSize, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_GEMM_DEFAULT
     ));
 }
 

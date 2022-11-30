@@ -6,7 +6,7 @@
 constexpr int TILE_DIM = 4;
 
 using DTYPE = float;
-using ACC_TYPE = double;
+using ACC_TYPE = float;
 
 #define SQRT1 0.5 // sqrt(1 / 4)
 #define SQRT2 0.7071067811865475727373109293694142252206802368164062  // sqrt(2 / 4)

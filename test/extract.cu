@@ -63,7 +63,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaDeviceSynchronize());
 
 
-    print_matrix_rowmaj(A, 1, 16, rows);
+    // print_matrix_rowmaj(A, 1, 16, rows);
     __TIMER_START__(computation);
     dct_a100_best_param(rows, cols, A, cols, dct, cols, stream);
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -75,11 +75,6 @@ int main(int argc, char **argv){
     // std::cout << "Before add wm\n";
     // print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
     tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, mod2, stream);
-
-
-    mmd_batched_a100_best_param(false, U, S, inv, numTiles);
-    invsvd_a100_best_param(blasHandle, numTiles, inv, U, S, V);
-    idct_a100_best_param(rows, cols, inv, cols, A, cols, stream);
     cudaDeviceSynchronize();
     __TIMER_STOP__(computation);
 
