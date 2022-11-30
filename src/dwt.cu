@@ -31,27 +31,22 @@ __global__ void light_cutoff(size_t rows, size_t cols, uint8_t *img, size_t lda,
 
 // must be run with grid size = (Nc/2, Nr/2)  where Nr = numrows of input
 template<typename T>
-__global__ void kern_haar2d_fwd(T* img, T* c_a, T* c_h, T* c_v, T* c_d, int Nr, int Nc) {
+__global__ void kern_haar2d_fwd(size_t Nr, size_t Nc, T* img, size_t lda, T* c_a, T* c_h, T* c_v, T* c_d) {
     int gidx = threadIdx.x + blockIdx.x*blockDim.x;
     int gidy = threadIdx.y + blockIdx.y*blockDim.y;
-    int Nr_is_odd = (Nr & 1);
-    int Nc_is_odd = (Nc & 1);
-    int Nr2 = (Nr + Nr_is_odd) / 2;
-    int Nc2 = (Nc + Nc_is_odd) / 2;
+    int Nr2 = Nr / 2;
+    int Nc2 = Nc / 2;
     if (gidy < Nr2 && gidx < Nc2) {
 
-        // for odd N, image is virtually extended by repeating the last element
         int posx0 = 2*gidx;
         int posx1 = 2*gidx+1;
-        if ((Nc_is_odd) && (posx1 == Nc)) posx1--;
         int posy0 = 2*gidy;
         int posy1 = 2*gidy+1;
-        if ((Nr_is_odd) && (posy1 == Nr)) posy1--;
 
-        T a = img[posy0*Nc + posx0];
-        T b = img[posy0*Nc + posx1];
-        T c = img[posy1*Nc + posx0];
-        T d = img[posy1*Nc + posx1];
+        T a = img[posy0*lda + posx0];
+        T b = img[posy0*lda + posx1];
+        T c = img[posy1*lda + posx0];
+        T d = img[posy1*lda + posx1];
 
         c_a[gidy* Nc2 + gidx] = 0.5*HAAR_AVG(HAAR_AVG(a, c), HAAR_AVG(b, d)); // A
         c_v[gidy* Nc2 + gidx] = 0.5*HAAR_DIF(HAAR_AVG(a, c), HAAR_AVG(b, d)); // V
@@ -61,18 +56,20 @@ __global__ void kern_haar2d_fwd(T* img, T* c_a, T* c_h, T* c_v, T* c_d, int Nr, 
 }
 
 template<typename T>
-int haar_forward2d(T* d_image, T** d_coeffs, int Nr, int Nc) {
+int haar_forward2d(size_t Nr, size_t Nc, T* d_image, size_t lda, T** d_coeffs) {
 
     int tpb = 32;
     dim3 dimGrid = dim3(w_iDivUp((Nc + 1) / 2, tpb), w_iDivUp((Nr + 1) / 2, tpb));
     dim3 dimBlock = dim3(tpb, tpb);
-    kern_haar2d_fwd<<<dimGrid, dimBlock>>>(d_image, d_coeffs[0], d_coeffs[1], d_coeffs[2], d_coeffs[3], Nr, Nc);
+    kern_haar2d_fwd<<<dimGrid, dimBlock>>>(Nr, Nc, d_image, lda, d_coeffs[0], d_coeffs[1], d_coeffs[2], d_coeffs[3]);
 
     return 0;
 }
 
 // must be run with grid size = (2*Nr, 2*Nc) ; Nr = numrows of input
-__global__ void kern_haar2d_inv(DTYPE* img, DTYPE* c_a, DTYPE* c_h, DTYPE* c_v, DTYPE* c_d, int Nr, int Nc, int Nr2, int Nc2) {
+__global__ void kern_haar2d_inv(DTYPE* img, size_t lda, 
+                                DTYPE* c_a, DTYPE* c_h, DTYPE* c_v, DTYPE* c_d, 
+                                int Nr, int Nc, int Nr2, int Nc2) {
     int gidx = threadIdx.x + blockIdx.x*blockDim.x;
     int gidy = threadIdx.y + blockIdx.y*blockDim.y;
     if (gidy < Nr2 && gidx < Nc2) {
@@ -86,16 +83,16 @@ __global__ void kern_haar2d_inv(DTYPE* img, DTYPE* c_a, DTYPE* c_h, DTYPE* c_v, 
         if (gx1 == 1 && gy1 == 0) res = 0.5*HAAR_DIF(HAAR_AVG(a, c), HAAR_AVG(b, d));
         if (gx1 == 0 && gy1 == 1) res = 0.5*HAAR_AVG(HAAR_DIF(a, c), HAAR_DIF(b, d));
         if (gx1 == 1 && gy1 == 1) res = 0.5*HAAR_DIF(HAAR_DIF(a, c), HAAR_DIF(b, d));
-        img[gidy*Nc2 + gidx] = res;
+        img[gidy*lda + gidx] = res;
     }
 
 }
 
-int haar_inverse2d(DTYPE* d_image, DTYPE** d_coeffs, size_t Nr, size_t Nc) {
+int haar_inverse2d(size_t Nr, size_t Nc, DTYPE* d_image, size_t lda, DTYPE** d_coeffs) {
     int tpb = 32;
     dim3 dimGrid = dim3(w_iDivUp(Nc, tpb), w_iDivUp(Nr, tpb));
     dim3 dimBlock = dim3(tpb, tpb);
-    kern_haar2d_inv<<<dimGrid, dimBlock>>>(d_image, d_coeffs[0], d_coeffs[1], d_coeffs[2], d_coeffs[3], 
+    kern_haar2d_inv<<<dimGrid, dimBlock>>>(d_image, lda, d_coeffs[0], d_coeffs[1], d_coeffs[2], d_coeffs[3], 
             (Nr + 1) / 2, (Nc + 1) / 2, Nr, Nc);
 
     return 0;
