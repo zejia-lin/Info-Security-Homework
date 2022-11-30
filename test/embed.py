@@ -7,7 +7,7 @@ import time
 from pywt import dwt2, idwt2
 
 
-img = cv2.imread('../pic/violet.jpg')
+img = cv2.imread('../pic/violet-paint.jpg')
 wm = (cv2.cvtColor(cv2.imread('../pic/wm.png'), cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
 ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
