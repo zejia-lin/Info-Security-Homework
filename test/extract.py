@@ -12,9 +12,11 @@ ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
 print("Image shape", img.shape)
 img_shape = img.shape[:2]
-rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
-            wm.shape[0] * 8 * (img.shape[1] // (wm.shape[0] * 8)))
+rd_shape = (32 * (img.shape[0] // 32), 32 * (img.shape[1] // 32))
+# rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
+#             wm.shape[1] * 8 * (img.shape[1] // (wm.shape[1] * 8)))
 wmlen = wm.shape[0] * wm.shape[1]
+print("Rd shape", rd_shape)
 
 img_YUV = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
 
@@ -26,7 +28,7 @@ wm.tofile('../out/wm.bin')
 print("CA[0]\n========================\n", ca[0])
 
 subprocess.run("sh ../script/bwm.sh ../test/extract.cu".split(), cwd='../test').check_returncode()
-subprocess.run(f"../build/extract {ca[0].shape[0]} {ca[0].shape[1]} {wmlen}".split())
+subprocess.run(f"../build/extract {ca[0].shape[1]} {ca[0].shape[0]} {wmlen}".split())
 
 wmget = np.fromfile('../out/wmget.bin', dtype=np.float32).reshape(wm.shape)
 wmget_bin = (wmget > 0.3).astype(np.uint8) * 255

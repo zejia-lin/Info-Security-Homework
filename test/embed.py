@@ -13,14 +13,21 @@ ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
 img[img > 245] = 245
 
+# img = cv2.resize(img, (4898, 6660))
+
 print("Image shape", img.shape)
 img_shape = img.shape[:2]
-rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
-            wm.shape[0] * 8 * (img.shape[1] // (wm.shape[0] * 8)))
+rd_shape = (32 * (img.shape[0] // 32), 32 * (img.shape[1] // 32))
+# rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
+#             wm.shape[1] * 8 * (img.shape[1] // (wm.shape[1] * 8)))
 wmlen = wm.shape[0] * wm.shape[1]
+print("Rd shape", rd_shape)
 
 img_YUV = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-
+# img_YUV = cv2.copyMakeBorder(cv2.cvtColor(img, cv2.COLOR_BGR2YUV),
+#                                     0, img.shape[0] % 512, 0, img.shape[1] % 512,
+#                                     cv2.BORDER_REPLICATE)
+print("YUV shape", img_YUV.shape)
 for channel in range(3):
     ca[channel], hvd[channel] = dwt2(img_YUV[:rd_shape[0], :rd_shape[1], channel], 'haar')
 
@@ -29,7 +36,7 @@ wm.tofile('../out/wm.bin')
 print("CA[0]\n========================\n", ca[0])
 
 subprocess.run("sh ../script/bwm.sh ../test/embed.cu".split(), cwd='../test').check_returncode()
-subprocess.run(f"../build/embed {ca[0].shape[0]} {ca[0].shape[1]} {wmlen}".split())
+subprocess.run(f"../build/embed {ca[0].shape[1]} {ca[0].shape[0]} {wmlen}".split())
 
 embeded = np.fromfile("../out/embeded.bin", dtype=np.float32).reshape(ca[0].shape)
 img_YUV[:rd_shape[0], :rd_shape[1], 0] = idwt2((embeded, hvd[0]), "haar")

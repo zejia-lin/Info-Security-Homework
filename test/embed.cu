@@ -13,9 +13,9 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaGetDeviceProperties(&prop, device));
     std::cout << "Using device " << device << " " << prop.name << std::endl;
 
-    int rows = atoi(argv[1]);
-    int cols = atoi(argv[2]);
-    int wmlen = atoi(argv[3]);
+    size_t rows = atoll(argv[1]);
+    size_t cols = atoll(argv[2]);
+    size_t wmlen = atoll(argv[3]);
 
     float *A, *U, *S, *V, *inv, *dct, *wmget;
     int mod1 = 37, mod2 = 11;
