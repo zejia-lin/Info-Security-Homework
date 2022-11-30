@@ -18,7 +18,7 @@ int main(int argc, char **argv){
     int wmlen = atoi(argv[3]);
 
     float *A, *U, *S, *V, *inv, *dct, *wmget;
-    int mod1 = 37;
+    int mod1 = 37, mod2 = 11;
     uint8_t *wm;
     int *info;
 
@@ -74,7 +74,7 @@ int main(int argc, char **argv){
 
     std::cout << "Before add wm\n";
     print_matrix_rowmaj(S, 5, TILE_DIM, TILE_DIM);
-    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, stream);
+    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, mod2, stream);
 
 
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);

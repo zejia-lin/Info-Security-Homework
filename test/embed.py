@@ -6,30 +6,33 @@ import subprocess
 import time
 from pywt import dwt2, idwt2
 
-img = cv2.imread('../pic/lena9.png')
+
+img = cv2.imread('../pic/eleina.jpg')
 wm = (cv2.cvtColor(cv2.imread('../pic/wm.png'), cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
 ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
+img[img > 245] = 245
+
+print("Image shape", img.shape)
 img_shape = img.shape[:2]
+rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
+            wm.shape[0] * 8 * (img.shape[1] // (wm.shape[0] * 8)))
 wmlen = wm.shape[0] * wm.shape[1]
 
-img_YUV = cv2.copyMakeBorder(cv2.cvtColor(img, cv2.COLOR_BGR2YUV),
-                                    0, img.shape[0] % 2, 0, img.shape[1] % 2,
-                                    cv2.BORDER_CONSTANT, value=(0, 0, 0))
-ca_shape = (img_YUV.shape[0] // 2, img_YUV.shape[1] // 2)
+img_YUV = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+
 for channel in range(3):
-    ca[channel], hvd[channel] = dwt2(img_YUV[:, :, channel], 'haar')
+    ca[channel], hvd[channel] = dwt2(img_YUV[:rd_shape[0], :rd_shape[1], channel], 'haar')
 
 ca[0].astype(np.float32).tofile('../out/haar.bin')
 wm.tofile('../out/wm.bin')
 print("CA[0]\n========================\n", ca[0])
 
 subprocess.run("sh ../script/bwm.sh ../test/embed.cu".split(), cwd='../test').check_returncode()
-subprocess.run(f"../build/embed {ca_shape[0]} {ca_shape[1]} {wmlen}".split())
+subprocess.run(f"../build/embed {ca[0].shape[0]} {ca[0].shape[1]} {wmlen}".split())
 
-embeded = np.fromfile("../out/embeded.bin", dtype=np.float32).reshape(hvd[0][0].shape)
-invhaar = idwt2((embeded, hvd[0]), "haar")
-img_YUV[:, :, 0] = invhaar
+embeded = np.fromfile("../out/embeded.bin", dtype=np.float32).reshape(ca[0].shape)
+img_YUV[:rd_shape[0], :rd_shape[1], 0] = idwt2((embeded, hvd[0]), "haar")
 
 embed_img_YUV = img_YUV[:img_shape[0], :img_shape[1]]
 embed_img = cv2.cvtColor(embed_img_YUV, cv2.COLOR_YUV2BGR)
@@ -37,6 +40,8 @@ embed_img = np.clip(embed_img, a_min=0, a_max=255)
 
 wmget = np.fromfile('../out/wmget.bin', dtype=np.float32).reshape(wm.shape)
 wmget_bin = (wmget > 0.5).astype(np.uint8) * 255
+
+# embed_img = cv2.resize(embed_img, (shape_backup[1], shape_backup[0]))
 
 cv2.imwrite("../out/embeded.png", embed_img)
 cv2.imwrite("../out/origin.png", wm * 255)
