@@ -7,26 +7,19 @@ import time
 from pywt import dwt2, idwt2
 
 
-img = cv2.imread('../pic/violet-big.png')
+img = cv2.imread('../pic/lena.png')
 wm = (cv2.cvtColor(cv2.imread('../pic/wm.png'), cv2.COLOR_BGR2GRAY) > 128).astype(np.uint8)
 ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 
 img[img > 245] = 245
 
-# img = cv2.resize(img, (4898, 6660))
-
 print("Image shape", img.shape)
 img_shape = img.shape[:2]
 rd_shape = (32 * (img.shape[0] // 32), 32 * (img.shape[1] // 32))
-# rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
-#             wm.shape[1] * 8 * (img.shape[1] // (wm.shape[1] * 8)))
 wmlen = wm.shape[0] * wm.shape[1]
 print("Rd shape", rd_shape)
 
 img_YUV = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
-# img_YUV = cv2.copyMakeBorder(cv2.cvtColor(img, cv2.COLOR_BGR2YUV),
-#                                     0, img.shape[0] % 512, 0, img.shape[1] % 512,
-#                                     cv2.BORDER_REPLICATE)
 print("YUV shape", img_YUV.shape)
 for channel in range(3):
     ca[channel], hvd[channel] = dwt2(img_YUV[:rd_shape[0], :rd_shape[1], channel], 'haar')
@@ -47,8 +40,6 @@ embed_img = np.clip(embed_img, a_min=0, a_max=255)
 
 wmget = np.fromfile('../out/wmget.bin', dtype=np.float32).reshape(wm.shape)
 wmget_bin = (wmget > 0.5).astype(np.uint8) * 255
-
-# embed_img = cv2.resize(embed_img, (shape_backup[1], shape_backup[0]))
 
 cv2.imwrite("../out/embeded.png", embed_img)
 cv2.imwrite("../out/origin.png", wm * 255)

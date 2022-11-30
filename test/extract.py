@@ -13,8 +13,6 @@ ca, hvd = [np.array([])] * 3, [np.array([])] * 3
 print("Image shape", img.shape)
 img_shape = img.shape[:2]
 rd_shape = (32 * (img.shape[0] // 32), 32 * (img.shape[1] // 32))
-# rd_shape = (wm.shape[0] * 8 * (img.shape[0] // (wm.shape[0] * 8)), 
-#             wm.shape[1] * 8 * (img.shape[1] // (wm.shape[1] * 8)))
 wmlen = wm.shape[0] * wm.shape[1]
 print("Rd shape", rd_shape)
 

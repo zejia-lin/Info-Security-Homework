@@ -32,7 +32,7 @@ __global__ void gpu_trans_and_pack_continguous(size_t rows, size_t cols, float *
     
     // grid stride loop
 #pragma unroll
-    for(; tile_id < num_tiles; tile_id += gridDim.x){
+    for(; tile_id < num_tiles; tile_id += gridDim.x * blockDim.x){
 
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
@@ -60,7 +60,7 @@ __global__ void gpu_unpack_and_trans(size_t rows, size_t cols, const float *A, s
     
     // grid stride loop
 #pragma unroll
-    for(; tile_id < num_tiles; tile_id += gridDim.x){
+    for(; tile_id < num_tiles; tile_id += gridDim.x * blockDim.x){
 
         // compute the starting address of current tile in A
         int tile_x = tile_id / tile_per_row;
