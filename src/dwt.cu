@@ -20,6 +20,15 @@ int w_iDivUp(int a, int b) {
 }
 
 
+__global__ void light_cutoff(size_t rows, size_t cols, uint8_t *img, size_t lda, uint8_t thresh){
+    for(size_t tid = threadIdx.x + blockIdx.x * blockDim.x; 
+        tid < rows * cols; 
+        tid += blockDim.x * gridDim.x){
+        img[tid] = min(img[tid], thresh);
+    }
+}
+
+
 // must be run with grid size = (Nc/2, Nr/2)  where Nr = numrows of input
 template<typename T>
 __global__ void kern_haar2d_fwd(T* img, T* c_a, T* c_h, T* c_v, T* c_d, int Nr, int Nc) {

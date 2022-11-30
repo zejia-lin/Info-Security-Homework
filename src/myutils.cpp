@@ -1,12 +1,11 @@
 
 #pragma once
 
+#include <chrono>
+#include <fstream>
 #include <iostream>
 #include <sys/stat.h>
-#include <fstream>
-#include <chrono>
 #include <vector>
-
 
 #define IDX(i, j, ld) (((i) * (ld)) + (j))
 
@@ -16,106 +15,112 @@ using clock_type = chrono::high_resolution_clock;
 #define ENABLE_TIMER
 
 #ifdef ENABLE_TIMER
-#define __TIMER_START__(_ms) double _ms; { \
-    auto _start_timer = clock_type::now();
+#define __TIMER_START__(_ms)                                                                                           \
+    double _ms;                                                                                                        \
+    {                                                                                                                  \
+        auto _start_timer = clock_type::now();
 
-#define __TIMER_STOP__(_ms) \
-    auto _end_timer = clock_type::now(); \
-    _ms = chrono::duration_cast<chrono::microseconds>(_end_timer - _start_timer).count() / 1000.; \
-}
+#define __TIMER_STOP__(_ms)                                                                                            \
+    auto _end_timer = clock_type::now();                                                                               \
+    _ms = chrono::duration_cast<chrono::microseconds>(_end_timer - _start_timer).count() / 1000.;                      \
+    }
 #else
 #define __TIMER_START__
 #define __TIMER_STOP__(_duration)
 #endif
 
 // CUDA API error checking
-#define CUDA_CHECK(err)                                                                            \
-    do {                                                                                           \
-        cudaError_t err_ = (err);                                                                  \
-        if (err_ != cudaSuccess) {                                                                 \
-            printf("CUDA error %s at %s:%d\n", cudaGetErrorString(err_), __FILE__, __LINE__);      \
-            throw std::runtime_error("CUDA error");                                                \
-        }                                                                                          \
+#define CUDA_CHECK(err)                                                                                                \
+    do {                                                                                                               \
+        cudaError_t err_ = (err);                                                                                      \
+        if (err_ != cudaSuccess) {                                                                                     \
+            printf("CUDA error %s at %s:%d\n", cudaGetErrorString(err_), __FILE__, __LINE__);                          \
+            throw std::runtime_error("CUDA error");                                                                    \
+        }                                                                                                              \
     } while (0)
 
 // cusolver API error checking
-#define CUSOLVER_CHECK(err)                                                                        \
-    do {                                                                                           \
-        cusolverStatus_t err_ = (err);                                                             \
-        if (err_ != CUSOLVER_STATUS_SUCCESS) {                                                     \
-            printf("cusolver error %d at %s:%d\n", err_, __FILE__, __LINE__);                      \
-            throw std::runtime_error("cusolver error");                                            \
-        }                                                                                          \
+#define CUSOLVER_CHECK(err)                                                                                            \
+    do {                                                                                                               \
+        cusolverStatus_t err_ = (err);                                                                                 \
+        if (err_ != CUSOLVER_STATUS_SUCCESS) {                                                                         \
+            printf("cusolver error %d at %s:%d\n", err_, __FILE__, __LINE__);                                          \
+            throw std::runtime_error("cusolver error");                                                                \
+        }                                                                                                              \
     } while (0)
 
 // cublas API error checking
-#define CUBLAS_CHECK(err)                                                                          \
-    do {                                                                                           \
-        cublasStatus_t err_ = (err);                                                               \
-        if (err_ != CUBLAS_STATUS_SUCCESS) {                                                       \
-            printf("cublas error %d at %s:%d\n", err_, __FILE__, __LINE__);                        \
-            throw std::runtime_error("cublas error");                                              \
-        }                                                                                          \
+#define CUBLAS_CHECK(err)                                                                                              \
+    do {                                                                                                               \
+        cublasStatus_t err_ = (err);                                                                                   \
+        if (err_ != CUBLAS_STATUS_SUCCESS) {                                                                           \
+            printf("cublas error %d at %s:%d\n", err_, __FILE__, __LINE__);                                            \
+            throw std::runtime_error("cublas error");                                                                  \
+        }                                                                                                              \
     } while (0)
 
 // cublas API error checking
-#define CUSPARSE_CHECK(err)                                                                        \
-    do {                                                                                           \
-        cusparseStatus_t err_ = (err);                                                             \
-        if (err_ != CUSPARSE_STATUS_SUCCESS) {                                                     \
-            printf("cusparse error %d at %s:%d\n", err_, __FILE__, __LINE__);                      \
-            throw std::runtime_error("cusparse error");                                            \
-        }                                                                                          \
+#define CUSPARSE_CHECK(err)                                                                                            \
+    do {                                                                                                               \
+        cusparseStatus_t err_ = (err);                                                                                 \
+        if (err_ != CUSPARSE_STATUS_SUCCESS) {                                                                         \
+            printf("cusparse error %d at %s:%d\n", err_, __FILE__, __LINE__);                                          \
+            throw std::runtime_error("cusparse error");                                                                \
+        }                                                                                                              \
     } while (0)
 
-
-
-void print_matrix_colmaj(float *A, int rows, int cols, int lda){
+void print_matrix_colmaj(float *A, int rows, int cols, int lda) {
     printf("[");
-    for(int i = 0; i < rows; ++i){
+    for (int i = 0; i < rows; ++i) {
         printf("[");
-        for(int j = 0; j < cols; ++j){
+        for (int j = 0; j < cols; ++j) {
             printf("%.3f, ", A[IDX(j, i, lda)]);
         }
         printf("]");
-        if(i != rows - 1){
+        if (i != rows - 1) {
             printf(",\n");
         }
     }
     printf("]\n\n");
 }
 
-template<typename T>
-void print_matrix_rowmaj(T *A, int rows, int cols, int lda){
+template <typename T> void print_matrix_rowmaj(T *A, int rows, int cols, int lda) {
     printf("[");
-    for(int i = 0; i < rows; ++i){
+    for (int i = 0; i < rows; ++i) {
         printf("[");
-        for(int j = 0; j < cols; ++j){
+        for (int j = 0; j < cols; ++j) {
             printf("%.7f, ", A[IDX(i, j, lda)]);
         }
         printf("]");
-        if(i != rows - 1){
+        if (i != rows - 1) {
             printf(",\n");
         }
     }
     printf("]\n\n");
 }
 
-void print_vector(float *A, int n){
-    for(int i = 0; i < n; ++i){
+void print_vector(float *A, int n) {
+    for (int i = 0; i < n; ++i) {
         std::cout << A[i] << ", ";
     }
     std::cout << std::endl;
 }
 
+#define CHECK_READ(rr)                                                                                                 \
+    {                                                                                                                  \
+        auto bb = (rr);                                                                                                \
+        if (bb == 0) {                                                                                                 \
+            printf("Read file %d at %s:%d\n", bb, __FILE__, __LINE__);                                                 \
+            throw std::runtime_error("Read file error");                                                               \
+        }                                                                                                              \
+    }
 
-int myreadbin(const std::string &filepath, void *buffer){
+int myreadbin(const std::string &filepath, void *buffer) {
     std::ifstream fin(filepath, std::ios::binary);
     std::vector<unsigned char> bb(std::istreambuf_iterator<char>(fin), {});
     memcpy(buffer, bb.data(), sizeof(char) * bb.size());
     return bb.size();
 }
-
 
 char *readbin(const std::string &filePath, size_t *fileSize, void *buffer, size_t bufferSize) {
     std::cout << "Begin read " << filePath << std::endl;
@@ -175,4 +180,3 @@ bool writebin(const std::string &filePath, const void *buffer, size_t size) {
 
     return true;
 }
-

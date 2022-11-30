@@ -21,6 +21,8 @@ print("Rd shape", rd_shape)
 
 img_YUV = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
 print("YUV shape", img_YUV.shape)
+img_YUV[:, :, 0].astype(np.float32).tofile('../out/img.bin')
+
 for channel in range(3):
     ca[channel], hvd[channel] = dwt2(img_YUV[:rd_shape[0], :rd_shape[1], channel], 'haar')
 
