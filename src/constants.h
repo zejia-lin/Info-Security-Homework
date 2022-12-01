@@ -4,6 +4,8 @@
 #include <cuda_runtime.h>
 
 constexpr int TILE_DIM = 4;
+constexpr size_t MAX_ROWS = 10240;
+constexpr size_t MAX_COLS = 10240;
 
 using DTYPE = float;
 using ACC_TYPE = float;

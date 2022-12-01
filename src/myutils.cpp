@@ -17,16 +17,19 @@ using clock_type = chrono::high_resolution_clock;
 #ifdef ENABLE_TIMER
 #define __TIMER_START__(_ms)                                                                                           \
     double _ms;                                                                                                        \
-    {                                                                                                                  \
-        auto _start_timer = clock_type::now();
+    auto _start_timer_##_ms = clock_type::now();
 
 #define __TIMER_STOP__(_ms)                                                                                            \
-    auto _end_timer = clock_type::now();                                                                               \
-    _ms = chrono::duration_cast<chrono::microseconds>(_end_timer - _start_timer).count() / 1000.;                      \
-    }
+    auto _end_timer_##_ms = clock_type::now();                                                                         \
+    _ms = chrono::duration_cast<chrono::microseconds>(_end_timer_##_ms - _start_timer_##_ms).count() / 1000.;\
+    std::cout << #_ms << " in " << _ms << " ms\n";
+
+#define __PRINT_TIME__(_ms) std::cout << #_ms << " in " << _ms << " ms\n";
+
 #else
-#define __TIMER_START__
+#define __TIMER_START__(_duration)
 #define __TIMER_STOP__(_duration)
+#define __PRINT_TIME__(_ms)
 #endif
 
 // CUDA API error checking

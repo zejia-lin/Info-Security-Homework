@@ -1,4 +1,6 @@
 
+#include <opencv2/opencv.hpp>
+
 #include "../src/svd.cu"
 #include "../src/mydct.cu"
 #include "../src/dwt.cu"
