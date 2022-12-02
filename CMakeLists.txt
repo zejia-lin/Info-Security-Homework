@@ -31,16 +31,36 @@ message(STATUS "Found OpenCV(${OpenCV_VERSION}) at ${OpenCV_DIR}")
 
 
 ############################################################
+# CMake build type
+############################################################
+enable_language(CUDA)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+message(STATUS "Build with ${CMAKE_BUILD_TYPE}")
+
+
+############################################################
 # Targets
 ############################################################
-
-enable_language(CUDA)
-
 add_executable(Embed test/embed.cu)
 target_link_libraries(Embed ${OpenCV_LIBS})
+target_compile_options(Embed PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       --use_fast_math
+                       -O3
+                       >)
 
 add_executable(Extract test/extract.cu)
 target_link_libraries(Extract ${OpenCV_LIBS})
+target_compile_options(Extract PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       --use_fast_math
+                       -O3
+                       >)
 
-add_executable(Helloworld test/helloworld.cu)
-target_link_libraries(Helloworld ${OpenCV_LIBS})
+add_executable(WmCLI src/cli.cu)
+target_link_libraries(WmCLI ${OpenCV_LIBS})
+target_compile_options(WmCLI PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       --use_fast_math
+                       -O3
+                       >)
+

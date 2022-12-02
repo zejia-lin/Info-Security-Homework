@@ -1,6 +1,9 @@
 
 #pragma once
 
+#include <vector>
+#include <regex>
+#include <string>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -71,6 +74,15 @@ using clock_type = chrono::high_resolution_clock;
             throw std::runtime_error("cusparse error");                                                                \
         }                                                                                                              \
     } while (0)
+
+
+std::vector<std::string> split(const std::string &s){
+    std::regex wsre("\\s+");
+    return std::vector<std::string>(std::sregex_token_iterator(s.begin(), s.end(), wsre, -1), 
+                std::sregex_token_iterator());
+}
+
+
 
 void print_matrix_colmaj(float *A, int rows, int cols, int lda) {
     printf("[");

@@ -124,7 +124,7 @@ void dct_a100_best_param(size_t rows, size_t cols, float *A, size_t lda, float *
     dim3 dimGrid = dim3(512);
     dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
     size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
-    print_matrix_rowmaj(A, 1, 16, lda);
+    // print_matrix_rowmaj(A, 1, 16, lda);
     dct_gpu<<<dimGrid, dimBlock, smemSize, stream>>>(rows, cols, A, lda, res, ldres);
 }
 

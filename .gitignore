@@ -1,3 +1,6 @@
 build
 out
 pic
+old_build
+CMakeCache.txt
+CMakeFiles
