@@ -97,18 +97,18 @@ __global__ void dct_gpu(size_t rows, size_t cols, float *A, size_t lda, float *r
     
     // grid stride loop
 #pragma unroll
-    for(; tile_id < num_tiles; tile_id += gridDim.x){
+    for(; tile_id < num_tiles; tile_id += gridDim.x * blockDim.x){
 
         // compute the starting address of current tile in A
-        size_t tile_x = tile_id % tile_per_row;
-        size_t tile_y = tile_id / tile_per_row;
+        size_t tile_y = tile_id % tile_per_row;
+        size_t tile_x = tile_id / tile_per_row;
         size_t tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
         // compute the starting address of current tile in sA
         float *tile_ptr_to_shared = &sA[threadIdx.x * TILE_DIM * TILE_DIM];
         float *elm_ptr_to_res = &res[tile_offset_to_A + threadIdx.y * ldres + threadIdx.z];
-        // printf("(%llu, %llu, %llu): %f\n", tile_id, threadIdx.y, threadIdx.z, A[tile_offset_to_A + threadIdx.y * ldres + threadIdx.z]);
+        // printf("(%llu, %d, %d): %llu\n", tile_id, threadIdx.y, threadIdx.z, tile_offset_to_A + threadIdx.y * ldres + threadIdx.z);
         
         // copy to shared memory
         sA[threadIdx.x * TILE_DIM * TILE_DIM + threadIdx.y * TILE_DIM + threadIdx.z] = 
@@ -118,6 +118,16 @@ __global__ void dct_gpu(size_t rows, size_t cols, float *A, size_t lda, float *r
         dct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
     }
 }
+
+
+void dct_a100_best_param(size_t rows, size_t cols, float *A, size_t lda, float *res, size_t ldres, cudaStream_t stream=0){
+    dim3 dimGrid = dim3(512);
+    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
+    size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
+    print_matrix_rowmaj(A, 1, 16, lda);
+    dct_gpu<<<dimGrid, dimBlock, smemSize, stream>>>(rows, cols, A, lda, res, ldres);
+}
+
 
 __device__ __forceinline__ void idct_tile(const float *A, size_t lda, float *res, size_t u, size_t v){
     ACC_TYPE tmp = 0;
@@ -147,11 +157,11 @@ __global__ void idct_gpu(size_t rows, size_t cols, const float *A, size_t lda, f
     
     // grid stride loop
 #pragma unroll
-    for(; tile_id < num_tiles; tile_id += gridDim.x){
+    for(; tile_id < num_tiles; tile_id += gridDim.x + blockDim.x){
 
         // compute the starting address of current tile in A
-        size_t tile_x = tile_id % tile_per_row;
-        size_t tile_y = tile_id / tile_per_row;
+        size_t tile_y = tile_id % tile_per_row;
+        size_t tile_x = tile_id / tile_per_row;
         size_t tile_offset_to_A = tile_x * TILE_DIM * lda + tile_y * TILE_DIM;
         const float *tile_ptr_to_A = &A[tile_offset_to_A];
         
@@ -168,15 +178,6 @@ __global__ void idct_gpu(size_t rows, size_t cols, const float *A, size_t lda, f
         idct_tile(tile_ptr_to_shared, TILE_DIM, elm_ptr_to_res, threadIdx.y, threadIdx.z);
     }
 
-}
-
-
-void dct_a100_best_param(size_t rows, size_t cols, float *A, size_t lda, float *res, size_t ldres, cudaStream_t stream=0){
-    dim3 dimGrid = dim3(512);
-    dim3 dimBlock = dim3(8, TILE_DIM, TILE_DIM);
-    size_t smemSize = dimBlock.x * dimBlock.y * dimBlock.z * sizeof(float);
-    // print_matrix_rowmaj(A, 1, 16, lda);
-    dct_gpu<<<dimGrid, dimBlock, smemSize, stream>>>(rows, cols, A, lda, res, ldres);
 }
 
 void idct_a100_best_param(size_t rows, size_t cols, const float *A, size_t lda, float *res, size_t ldres, cudaStream_t stream=0){

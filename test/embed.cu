@@ -51,7 +51,7 @@ int main(int argc, char **argv){
     float *U, *S, *V, *inv, *dct, *wmget;
     float *Coefs;
     float *coefs[4];
-    int mod1 = 37, mod2 = 11;
+    int mod1 = 29, mod2 = 5;
     uint8_t *wm, *Img;
     int *info;
 
@@ -106,22 +106,23 @@ int main(int argc, char **argv){
 
     dct_a100_best_param(rows, cols, coefs[0], cols, dct, cols, stream);
     CUDA_CHECK(cudaDeviceSynchronize());
+    std::cout << "Finish dct\n";
     // writebin("../out/dct.bin", dct, sizeof(float) * rows * cols);
 
     gesvd_a100_best_param(solverHandle, numTiles, dct, U, S, V, work, lwork, info, gesvdParams);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    std::cout << "Before add\n";
-    print_matrix_rowmaj(S, 5, 4, TILE_DIM);
     tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, mod2, stream);
     CUDA_CHECK(cudaDeviceSynchronize());
-    std::cout << "After add\n";
-    print_matrix_rowmaj(S, 5, 4, TILE_DIM);
-    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, mod2, stream);
+    // tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, mod2, stream);
+    // CUDA_CHECK(cudaDeviceSynchronize());
 
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);
+    CUDA_CHECK(cudaDeviceSynchronize());
     invsvd_a100_best_param(blasHandle, numTiles, inv, U, S, V);
+    CUDA_CHECK(cudaDeviceSynchronize());
     idct_a100_best_param(rows, cols, inv, cols, coefs[0], cols, stream);
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     haar_inverse2d(rows * 2, cols * 2, Img, oricols, coefs);
 
