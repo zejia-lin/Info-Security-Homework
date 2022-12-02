@@ -39,5 +39,8 @@ enable_language(CUDA)
 add_executable(Embed test/embed.cu)
 target_link_libraries(Embed ${OpenCV_LIBS})
 
+add_executable(Extract test/extract.cu)
+target_link_libraries(Extract ${OpenCV_LIBS})
+
 add_executable(Helloworld test/helloworld.cu)
 target_link_libraries(Helloworld ${OpenCV_LIBS})
