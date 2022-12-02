@@ -156,7 +156,7 @@ void tiled_add_wm_a100_bestparam(size_t batchSize, float *S, uint8_t *wm,
     gpu_tiled_add_wm<<<dimGrid, dimBlock, 0, stream>>>(batchSize, S, wm, wmlen, mod1, mod2);
 }
 
-__global__ void gpu_tiled_get_wm(size_t batchSize, const float *S, float *wm, size_t wmlen, size_t mod1, size_t mod2){
+__global__ void gpu_tiled_get_wm(size_t batchSize, const float *S, uint8_t *wm, size_t wmlen, size_t mod1, size_t mod2){
 
     size_t basecnt = (batchSize + wmlen - 1) / wmlen;
     size_t numextra = batchSize - batchSize % wmlen;
@@ -177,12 +177,12 @@ __global__ void gpu_tiled_get_wm(size_t batchSize, const float *S, float *wm, si
         } else {
             acc /= float(basecnt - 1) / 1;
         }
-        wm[tid] = acc;
+        wm[tid] = uint8_t(acc * 255);
     }
 }
 
 
-void tiled_get_wm_a100_bestparam(size_t batchSize, const float *S, float *wm, 
+void tiled_get_wm_a100_bestparam(size_t batchSize, const float *S, uint8_t *wm, 
                                         size_t wmlen, size_t mod1, size_t mod2, cudaStream_t stream){
     dim3 dimGrid = dim3(512);
     dim3 dimBlock = dim3(512);

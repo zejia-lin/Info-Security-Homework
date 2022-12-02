@@ -23,9 +23,9 @@ int main(int argc, char **argv){
     cv::Mat matImg = cv::imread(argv[1]);
     cv::Mat matWm = cv::imread(argv[2]);
     std::vector<cv::Mat> imgYUV(3);
-    imgYUV[0].reserveBuffer(sizeof(uint8_t) * MAX_ROWS * MAX_COLS);
-    imgYUV[1].reserveBuffer(sizeof(uint8_t) * MAX_ROWS * MAX_COLS);
-    imgYUV[2].reserveBuffer(sizeof(uint8_t) * MAX_ROWS * MAX_COLS);
+    // imgYUV[0].reserveBuffer(sizeof(uint8_t) * MAX_ROWS * MAX_COLS);
+    // imgYUV[1].reserveBuffer(sizeof(uint8_t) * MAX_ROWS * MAX_COLS);
+    // imgYUV[2].reserveBuffer(sizeof(uint8_t) * MAX_ROWS * MAX_COLS);
 
     size_t orirows = matImg.rows;
     size_t oricols = matImg.cols;
@@ -48,11 +48,11 @@ int main(int argc, char **argv){
 
 
     // Allocation
-    float *U, *S, *V, *inv, *dct, *wmget;
+    float *U, *S, *V, *inv, *dct;
     float *Coefs;
     float *coefs[4];
     int mod1 = 29, mod2 = 5;
-    uint8_t *wm, *Img;
+    uint8_t *wm, *wmget, *Img;
     int *info;
 
     cudaStream_t stream = NULL;
@@ -65,7 +65,7 @@ int main(int argc, char **argv){
 
     __TIMER_START__(alloc_time);
     CUDA_CHECK(cudaMallocManaged(&wm, sizeof(uint8_t) * wmlen));
-    CUDA_CHECK(cudaMallocManaged(&wmget, sizeof(float) * wmlen));
+    CUDA_CHECK(cudaMallocManaged(&wmget, sizeof(uint8_t) * wmlen));
     CUDA_CHECK(cudaMallocManaged(&info, sizeof(int) * numTiles));
     CUDA_CHECK(cudaMallocManaged(&Img, sizeof(uint8_t) * orirows * oricols));
     CUDA_CHECK(cudaMallocManaged(&Coefs, sizeof(float) * orirows * oricols));
@@ -88,7 +88,7 @@ int main(int argc, char **argv){
     CUDA_CHECK(cudaMemcpy(wm, matWm.ptr<uint8_t>(), sizeof(uint8_t) * wmlen, cudaMemcpyDefault));
 
     CUDA_CHECK(cudaMemPrefetchAsync(wm, sizeof(uint8_t) * wmlen, device, stream));
-    CUDA_CHECK(cudaMemPrefetchAsync(wmget, sizeof(float) * wmlen, device, stream));
+    CUDA_CHECK(cudaMemPrefetchAsync(wmget, sizeof(uint8_t) * wmlen, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(info, sizeof(int) * numTiles, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(Img, sizeof(uint8_t) * orirows * oricols, device, stream));
     CUDA_CHECK(cudaMemPrefetchAsync(Coefs, sizeof(float) * orirows * oricols, device, stream));
@@ -106,7 +106,6 @@ int main(int argc, char **argv){
 
     dct_a100_best_param(rows, cols, coefs[0], cols, dct, cols, stream);
     CUDA_CHECK(cudaDeviceSynchronize());
-    std::cout << "Finish dct\n";
     // writebin("../out/dct.bin", dct, sizeof(float) * rows * cols);
 
     gesvd_a100_best_param(solverHandle, numTiles, dct, U, S, V, work, lwork, info, gesvdParams);
@@ -114,8 +113,8 @@ int main(int argc, char **argv){
 
     tiled_add_wm_a100_bestparam(numTiles, S, wm, wmlen, mod1, mod2, stream);
     CUDA_CHECK(cudaDeviceSynchronize());
-    // tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, mod2, stream);
-    // CUDA_CHECK(cudaDeviceSynchronize());
+    tiled_get_wm_a100_bestparam(numTiles, S, wmget, wmlen, mod1, mod2, stream);
+    CUDA_CHECK(cudaDeviceSynchronize());
 
     mmd_batched_a100_best_param(false, U, S, inv, numTiles);
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -147,6 +146,8 @@ int main(int argc, char **argv){
     cv::merge(imgYUV, matImg);
     cv::cvtColor(matImg, matImg, cv::COLOR_YUV2BGR);
     cv::imwrite("../out/gpucv.png", matImg);
+    cudaMemcpy(matWm.ptr<uint8_t>(), wmget, sizeof(uint8_t) * wmlen, cudaMemcpyDeviceToHost);
+    cv::imwrite("../out/gpuwm.png", matWm);
     __TIMER_STOP__(postproccess);
 
     // std::cout << "====================\nGemm from GPU\n";
@@ -154,7 +155,7 @@ int main(int argc, char **argv){
 
     writebin("../out/embeded.bin", coefs[0], sizeof(float) * rows * cols);
     writebin("../out/gpuout.bin", Img, sizeof(float) * orirows * oricols);
-    writebin("../out/wmget.bin", wmget, sizeof(float) * wmlen);
+    writebin("../out/wmget.bin", wmget, sizeof(uint8_t) * wmlen);
     writebin("../out/wmread.bin", wm, sizeof(uint8_t) * wmlen);
 
     // for(int i = 0; i < wmlen; ++i){
