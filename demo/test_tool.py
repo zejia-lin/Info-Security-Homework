@@ -9,6 +9,11 @@ def add_suffix(filename, suffix, outdir):
     return os.path.join(outdir, ob)
 
 
+def drop_suffix(filename):
+    bns = os.path.basename(filename).split('.')
+    return f"{bns[0].split('-')[:-2]}.{bns[1]}"
+
+
 def psnr(img1, img2):
     mse = np.mean((img1 - img2)**2)
     if mse < 1.0e-10:
@@ -102,7 +107,7 @@ def attack(img, atype):
 attack_list = {}
 attack_list['ori'] = '原图'
 attack_list['gray'] = '灰度'
-attack_list['blur5'] = '高斯模糊'
+attack_list['blur3'] = '高斯模糊'
 attack_list['rotate180'] = '旋转180度'
 attack_list['rotate90'] = '旋转90度'
 attack_list['chop10'] = '剪切掉20%'
@@ -111,5 +116,5 @@ attack_list['saltnoise'] = '随机噪声'
 attack_list['cover'] = '随机遮挡'
 attack_list['brighter20'] = '亮度提高20%'
 attack_list['darker20'] = '亮度降低20%'
-attack_list['largersize'] = '图像拉伸'
-attack_list['smallersize'] = '图像缩小'
+# attack_list['largersize'] = '图像拉伸'
+# attack_list['smallersize'] = '图像缩小'

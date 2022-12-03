@@ -8,15 +8,17 @@ import time
 from skimage.metrics import mean_squared_error
 import pandas as pd
 from test_tool import *
+from make_report import make_report
 
 
 basedir = os.path.dirname(__file__)
 picdir = os.path.join(basedir, 'pic')
+outdir = os.path.join(basedir, 'out')
 atkdir = os.path.join(basedir, 'out/attack')
 emdir = os.path.join(basedir, 'out/embeded')
 exdir = os.path.join(basedir, 'out/extracted')
 wmdir = os.path.join(basedir, 'wm')
-wmname = os.path.join(wmdir, 'logo-big.jpg')
+wmname = os.path.join(wmdir, 'logo.jpg')
 wmmat = cv2.imread(wmname)
 wmrows, wmcols = wmmat.shape[:2]
 
@@ -75,3 +77,6 @@ for picname in tqdm.tqdm(picnames):
     echo = server.stdout.readline()
 stdout_data, stderr_data = server.communicate()
 print(f'Extract time: {(time.time() - extract_st) * 1000} ms')
+
+make_report()
+print("Everything saved at", outdir)
