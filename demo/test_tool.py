@@ -1,5 +1,12 @@
 import numpy as np
 import cv2
+import os
+
+
+def add_suffix(filename, suffix, outdir):
+    bn = os.path.basename(filename).split('.')
+    ob = f"{bn[0]}-{suffix}.{bn[1]}"
+    return os.path.join(outdir, ob)
 
 
 def psnr(img1, img2):
@@ -50,7 +57,7 @@ def attack(img, atype):
         return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     if atype == "saltnoise":
-        for k in range(1000):
+        for k in range(img.shape[0] * img.shape[1] // 100):
             i = np.random.randint(img.shape[1])
             j = np.random.randint(img.shape[0])
             if img.ndim == 2:
@@ -62,12 +69,12 @@ def attack(img, atype):
         return img
 
     if atype == "cover":
-        cv2.rectangle(img, (384, 0), (510, 128), (0, 255, 0), 3)
-        cv2.rectangle(img, (0, 0), (300, 128), (255, 0, 0), 3)
-        cv2.line(img, (0, 0), (511, 511), (255, 0, 0), 5)
-        cv2.line(img, (0, 511), (511, 0), (255, 0, 255), 5)
-        cv2.circle(img, (256, 256), 63, (0, 0, 255), -1)
-        cv2.putText(img, 'LZJ 22214373', (10, 500), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 0), 2)
+        for _ in range(20):
+            pt1 = np.random.randint(0, max(img.shape[:2]) - max(img.shape[:2]) // 5, size=(2,))
+            pt2 = pt1 + np.random.randint(0, max(img.shape[:2]) // 5, size=(2,))
+            c = (np.random.randint(0, 255), np.random.randint(0, 255), np.random.randint(0, 255))
+            cv2.rectangle(img, pt1, pt2, c, -1)
+            cv2.putText(img, 'LZJ 22214373', pt2, cv2.FONT_HERSHEY_SIMPLEX, 4, c, 2)
         return img
 
     if atype == "brighter200":
@@ -83,11 +90,11 @@ def attack(img, atype):
 
     if atype == "largersize":
         w, h = img.shape[:2]
-        return cv2.resize(img, (int(h * 1.5), w))
+        return cv2.resize(img, (int(h * 1.2), w))
 
     if atype == "smallersize":
         w, h = img.shape[:2]
-        return cv2.resize(img, (int(h * 0.5), w))
+        return cv2.resize(img, (int(h * 0.8), w))
 
     return img
 
@@ -95,18 +102,14 @@ def attack(img, atype):
 attack_list = {}
 attack_list['ori'] = '原图'
 attack_list['gray'] = '灰度'
-attack_list['blur5'] = '模糊5'
-attack_list['blur10'] = '模糊10'
-attack_list['blur20'] = '模糊20'
+attack_list['blur5'] = '高斯模糊'
 attack_list['rotate180'] = '旋转180度'
 attack_list['rotate90'] = '旋转90度'
-attack_list['rotate45'] = '旋转45度'
-attack_list['chop30'] = '剪切掉30%'
-attack_list['chop50'] = '剪切掉50%'
-attack_list['chop80'] = '剪切掉80%'
-attack_list['saltnoise'] = '椒盐噪声'
+attack_list['chop10'] = '剪切掉20%'
+attack_list['chop25'] = '剪切掉50%'
+attack_list['saltnoise'] = '随机噪声'
 attack_list['cover'] = '随机遮挡'
-attack_list['brighter200'] = '亮度提高200%'
-attack_list['darker50'] = '亮度降低50%'
+attack_list['brighter20'] = '亮度提高20%'
+attack_list['darker20'] = '亮度降低20%'
 attack_list['largersize'] = '图像拉伸'
 attack_list['smallersize'] = '图像缩小'
