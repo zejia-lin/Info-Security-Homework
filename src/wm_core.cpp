@@ -2,7 +2,6 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <vector>
 
 #include <cuda_runtime.h>
 
@@ -189,30 +188,20 @@ public:
 };
 
 
-void lzjCLI(int batchSize=8, bool prompt=true){
+void lzjCLI(bool prompt=true){
 #define PROMPT if(prompt) std::cout
     std::cout << "Starting...\n";
     std::string line, filename;
-    std::vector<LzjWatermark> wmMakers(batchSize);
-    for(int i = 0; i < batchSize; ++i){
-        cudaStreamCreate(&wmMakers[i].stream); 
-    }
-
-    int lineid = -1;
+    LzjWatermark wmobj;
     PROMPT << "> ";
     while(std::getline(std::cin, line)){
         try{
             auto cmds = split(line);
-            lineid += 1;
-            if(lineid == batchSize){
-                lineid = 0;
-            }
-
             if(cmds[0] == "embed"){
                 cv::Mat matImg = cv::imread(cmds[1]);
                 cv::Mat matWm = cv::imread(cmds[2]);
                 std::string outpath = cmds[3];
-                wmMakers[lineid].embed(matImg, matWm);
+                wmobj.embed(matImg, matWm);
                 if(!cv::imwrite(outpath, matImg)){
                     PROMPT << "Fail to write " << outpath << "\n";
                 } else {
@@ -223,7 +212,7 @@ void lzjCLI(int batchSize=8, bool prompt=true){
                 int cols = std::stoi(cmds[2]);
                 cv::Mat matImg = cv::imread(cmds[3]);
                 std::string outpath = cmds[4];
-                cv::Mat matWm = wmMakers[lineid].extract(matImg, rows, cols);
+                cv::Mat matWm = wmobj.extract(matImg, rows, cols);
                 if(!cv::imwrite(outpath, matWm)){
                     PROMPT << "Fail to write " << outpath << "\n";
                 } else {
