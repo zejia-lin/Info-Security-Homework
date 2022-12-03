@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include <cuda_runtime.h>
 
@@ -188,48 +189,58 @@ public:
 };
 
 
-
-void lzjCLI(){
+void lzjCLI(int batchSize=8, bool prompt=true){
+#define PROMPT if(prompt) std::cout
     std::cout << "Starting...\n";
     std::string line, filename;
-    LzjWatermark wmobj;
-    std::cout << "> ";
+    std::vector<LzjWatermark> wmMakers(batchSize);
+    for(int i = 0; i < batchSize; ++i){
+        cudaStreamCreate(&wmMakers[i].stream); 
+    }
+
+    int lineid = -1;
+    PROMPT << "> ";
     while(std::getline(std::cin, line)){
         try{
             auto cmds = split(line);
+            lineid += 1;
+            if(lineid == batchSize){
+                lineid = 0;
+            }
+
             if(cmds[0] == "embed"){
                 cv::Mat matImg = cv::imread(cmds[1]);
                 cv::Mat matWm = cv::imread(cmds[2]);
                 std::string outpath = cmds[3];
-                wmobj.embed(matImg, matWm);
+                wmMakers[lineid].embed(matImg, matWm);
                 if(!cv::imwrite(outpath, matImg)){
-                    std::cout << "Fail to write " << outpath << "\n";
+                    PROMPT << "Fail to write " << outpath << "\n";
                 } else {
-                    std::cout << "Save " << outpath << "\n";
+                    PROMPT << "Save " << outpath << "\n";
                 }
             } else if(cmds[0] == "extract"){
                 int rows = std::stoi(cmds[1]);
                 int cols = std::stoi(cmds[2]);
                 cv::Mat matImg = cv::imread(cmds[3]);
                 std::string outpath = cmds[4];
-                cv::Mat matWm = wmobj.extract(matImg, rows, cols);
+                cv::Mat matWm = wmMakers[lineid].extract(matImg, rows, cols);
                 if(!cv::imwrite(outpath, matWm)){
-                    std::cout << "Fail to write " << outpath << "\n";
+                    PROMPT << "Fail to write " << outpath << "\n";
                 } else {
-                    std::cout << "Save " << outpath << "\n";
+                    PROMPT << "Save " << outpath << "\n";
                 }
             } else if(cmds[0] == "quit"){
                 break;
             } else {
-                std::cout << "[embed|extract]\n";
+                PROMPT << "[embed|extract]\n";
             }
-            std::cout << "> ";
+            PROMPT << "> ";
         } catch (std::exception e){
             std::cout << e.what() << "\n";
         }
     }
     std::cout << "Shutdown normally\n";
+#undef PROMPT
 }
-
 
 

@@ -64,3 +64,11 @@ target_compile_options(WmCLI PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        -O3
                        >)
 
+
+add_executable(Dvid demo/demo_video.cu)
+target_link_libraries(Dvid ${OpenCV_LIBS})
+target_compile_options(Dvid PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       --use_fast_math
+                       -O3
+                       >)
+
