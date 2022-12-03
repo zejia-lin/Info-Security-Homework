@@ -14,19 +14,19 @@ outdir = os.path.join(basedir, 'out')
 wmdir = os.path.join(basedir, 'wm')
 
 picnames = [os.path.join(picdir, i) for i in os.listdir(picdir)]
-wmname = os.path.join(wmdir, 'wm.png')
-
+wmname = os.path.join(wmdir, 'logo.jpg')
 wmmat = cv2.imread(wmname)
 wmrows, wmcols = wmmat.shape[:2]
 
+end2end_st = time.time()
 server = subprocess.Popen(f'../build/WmCLI', shell=True,
                     stdin=subprocess.PIPE, 
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.STDOUT)
 
-end2end_st = time.time()
 for _ in range(2):
     print(server.stdout.readline().decode('utf-8'), end='')
+print(f'End to end time: {(time.time() - end2end_st) * 1000} ms')
 
 compute_st = time.time()
 for picname in picnames:
@@ -36,12 +36,11 @@ for picname in picnames:
     cmd = f"embed {picname} {wmname} {outname}\n".encode('utf-8')
     server.stdin.write(cmd)
     server.stdin.flush()
-
-end2end_ed = time.time()
-print(f'End to end time: {(end2end_ed - end2end_st) * 1000} ms')
-print(f'Computation time: {(end2end_ed - compute_st) * 1000} ms')
+    echo = server.stdout.readline()
+print(f'Embed time: {(time.time() - compute_st) * 1000} ms')
 
 
+picnames = [os.path.join(outdir, i) for i in os.listdir(outdir)]
 compute_st = time.time()
 for picname in picnames:
     bn = os.path.basename(picname).split('.')
@@ -50,10 +49,9 @@ for picname in picnames:
     cmd = f"extract {wmrows} {wmcols} {picname} {outname}\n".encode('utf-8')
     server.stdin.write(cmd)
     server.stdin.flush()
+    echo = server.stdout.readline()
 
 stdout_data, stderr_data = server.communicate()
-end2end_ed = time.time()
-print(stdout_data.decode('utf-8'))
-print(f'Computation time: {(end2end_ed - compute_st) * 1000} ms')
+print(f'Extract time: {(time.time() - compute_st) * 1000} ms')
 
 

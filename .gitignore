@@ -1,6 +1,8 @@
 build
 out
 pic
+wm
 old_build
+attack
 CMakeCache.txt
 CMakeFiles
