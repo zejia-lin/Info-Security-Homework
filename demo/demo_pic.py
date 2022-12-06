@@ -18,7 +18,8 @@ atkdir = os.path.join(basedir, 'out/attack')
 emdir = os.path.join(basedir, 'out/embeded')
 exdir = os.path.join(basedir, 'out/extracted')
 wmdir = os.path.join(basedir, 'wm')
-wmname = os.path.join(wmdir, 'logo.jpg')
+watermark_name = 'logo.jpg'
+wmname = os.path.join(wmdir, watermark_name)
 wmmat = cv2.imread(wmname)
 wmrows, wmcols = wmmat.shape[:2]
 
@@ -78,5 +79,5 @@ for picname in tqdm.tqdm(picnames):
 stdout_data, stderr_data = server.communicate()
 print(f'Extract time: {(time.time() - extract_st) * 1000} ms')
 
-make_report()
+make_report(watermark_name)
 print("Everything saved at", outdir)

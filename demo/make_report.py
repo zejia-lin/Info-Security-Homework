@@ -6,7 +6,7 @@ import tqdm
 
 from test_tool import *
 
-def make_report():
+def make_report(watermark_name):
     basedir = os.path.dirname(__file__)
     picdir = os.path.join(basedir, 'pic')
     outdir = os.path.join(basedir, 'out')
@@ -14,7 +14,7 @@ def make_report():
     emdir = os.path.join(basedir, 'out/embeded')
     exdir = os.path.join(basedir, 'out/extracted')
     wmdir = os.path.join(basedir, 'wm')
-    wmname = os.path.join(wmdir, 'logo.jpg')
+    wmname = os.path.join(wmdir, f'{watermark_name}')
     wmmat = cv2.imread(wmname)
     wmmat = cv2.cvtColor(wmmat, cv2.COLOR_BGR2GRAY)
     cv2.threshold(wmmat, 127, 255, cv2.THRESH_OTSU, wmmat)
