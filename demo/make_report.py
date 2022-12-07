@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import cv2
 from skimage.metrics import mean_squared_error
+from skimage.metrics import structural_similarity
 import tqdm
+import sys
 
 from test_tool import *
 
@@ -40,14 +42,17 @@ def make_report(watermark_name):
         atk = bn.split('-')[-2]
         pname = '-'.join(bn.split('-')[:-3])
         pname = f"{pname}.{ext}"
-        mse_df.loc[len(mse_df)] = ['ours', pname, atk, mean_squared_error(ex, wmmat)]
+        mse_df.loc[len(mse_df)] = ['ours', pname, atk, structural_similarity(ex, wmmat)]
 
 
     mse_df.sort_values(['pic', 'attack', 'mse'], inplace=True)
     psnr_df.sort_values(['pic', 'psnr'], inplace=True)
-    mse_df.to_csv(os.path.join(outdir, 'mse.csv'))
+    mse_df.to_csv(os.path.join(outdir, 'ssim.csv'))
     psnr_df.to_csv(os.path.join(outdir, 'psnr.csv'))
+    
+    print(mse_df.describe())
+    print(psnr_df.describe())
 
 
 if __name__ == '__main__':
-    make_report()
+    make_report(sys.argv[1])
