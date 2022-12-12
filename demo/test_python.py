@@ -35,17 +35,23 @@ bwm.read_wm(wmname)
 # Embed
 ############################################################
 picnames = [os.path.join(picdir, i) for i in os.listdir(picdir)]
+time_df = pd.DataFrame(columns=['pic', 'resolution', 'time'])
 embed_st = time.time()
 for picname in tqdm.tqdm(picnames):
     try:
         bn = os.path.basename(picname).split('.')
         ob = f"{bn[0]}-out.{bn[1]}"
         outname = os.path.join(emdir, ob)
+        st = time.time()
         bwm.read_img(filename=picname)
         bwm.embed(outname)
+        ed = time.time()
+        img = cv2.imread(picname)
+        time_df.loc[len(time_df)] = [os.path.basename(picname), img.shape[0] * img.shape[1], ed - st]
     except Exception as e:
         print(e)
 print(f'Embed time: {(time.time() - embed_st) * 1000} ms')
+time_df.to_csv(os.path.join(outdir, 'time.csv'))
 
 
 ############################################################

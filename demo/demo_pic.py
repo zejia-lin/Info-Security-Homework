@@ -41,16 +41,23 @@ print(f'Startup time: {(time.time() - server_st) * 1000} ms')
 # Embed
 ############################################################
 picnames = [os.path.join(picdir, i) for i in os.listdir(picdir)]
+time_df = pd.DataFrame(columns=['pic', 'resolution', 'time'])
 embed_st = time.time()
 for picname in tqdm.tqdm(picnames):
     bn = os.path.basename(picname).split('.')
     ob = f"{bn[0]}-out.{bn[1]}"
     outname = os.path.join(emdir, ob)
     cmd = f"embed {picname} {wmname} {outname}\n".encode('utf-8')
+    st = time.time()
     server.stdin.write(cmd)
     server.stdin.flush()
     echo = server.stdout.readline()
+    ed = time.time()
+    img = cv2.imread(picname)
+    time_df.loc[len(time_df)] = [os.path.basename(picname), img.shape[0] * img.shape[1], ed - st]
 print(f'Embed time: {(time.time() - embed_st) * 1000} ms')
+print(time_df)
+time_df.to_csv(os.path.join(outdir, 'time.csv'))
 
 
 ############################################################

@@ -21,8 +21,8 @@ def make_report(watermark_name):
     wmmat = cv2.cvtColor(wmmat, cv2.COLOR_BGR2GRAY)
     cv2.threshold(wmmat, 127, 255, cv2.THRESH_OTSU, wmmat)
     cv2.imwrite(os.path.join(bindir, '000AAAorigin.jpg'), wmmat)
-    psnr_df = pd.DataFrame(columns=['method', 'pic', 'psnr'])
-    mse_df = pd.DataFrame(columns=['method', 'pic', 'attack', 'mse'])
+    psnr_df = pd.DataFrame(columns=['method', 'pic', 'psnr', 'ssim'])
+    mse_df = pd.DataFrame(columns=['method', 'pic', 'attack', 'ssim'])
 
     for emname in tqdm.tqdm(os.listdir(emdir)):
         em = cv2.imread(os.path.join(emdir, emname))
@@ -30,7 +30,10 @@ def make_report(watermark_name):
         pname = '-'.join(bn.split('-')[:-1])
         pname = f"{pname}.{ext}"
         ori = cv2.imread(os.path.join(picdir, pname))
-        psnr_df.loc[len(psnr_df)] = ['ours', emname, psnr(em, ori)]
+        psnr_df.loc[len(psnr_df)] = ['ours', emname, psnr(em, ori), structural_similarity(em, ori, channel_axis=2)]
+
+    psnr_df.sort_values(['pic', 'psnr'], inplace=True)
+    psnr_df.to_csv(os.path.join(outdir, 'psnr.csv'))
 
 
     for exname in tqdm.tqdm(os.listdir(exdir)):
@@ -45,10 +48,8 @@ def make_report(watermark_name):
         mse_df.loc[len(mse_df)] = ['ours', pname, atk, structural_similarity(ex, wmmat)]
 
 
-    mse_df.sort_values(['pic', 'attack', 'mse'], inplace=True)
-    psnr_df.sort_values(['pic', 'psnr'], inplace=True)
+    mse_df.sort_values(['pic', 'attack', 'ssim'], inplace=True)
     mse_df.to_csv(os.path.join(outdir, 'ssim.csv'))
-    psnr_df.to_csv(os.path.join(outdir, 'psnr.csv'))
     
     print(mse_df.describe())
     print(psnr_df.describe())
