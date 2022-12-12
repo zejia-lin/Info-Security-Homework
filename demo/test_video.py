@@ -15,8 +15,9 @@ picdir = os.path.join(basedir, 'pic')
 outdir = os.path.join(basedir, 'out')
 tmpdir = '/dev/shm/'
 wmdir = os.path.join(basedir, 'wm')
-video_path = os.path.join(picdir, 'bbb-short.mp4')
+video_path = os.path.join(picdir, 'nilou.mov')
 output_path = os.path.join(outdir, 'embeded.mp4')
+extract_path = os.path.join(outdir, 'extracted.mp4')
 watermark_name = 'logo.jpg'
 wmname = os.path.join(wmdir, watermark_name)
 wmmat = cv2.imread(wmname)
@@ -49,33 +50,72 @@ length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 video_writer = cv2.VideoWriter(output_path, int(fourcc), fps, frame_size)
 
 count = 0
-pbar = tqdm.tqdm(total=length)
-e2est = time.time()
 emtimeacc = 0
+print("Reading video...")
+pbar = tqdm.tqdm(total=length)
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
-    count += 1
-    pbar.update(1)
-    picname = os.path.join(tmpdir, 'lzj_tmp.jpg')
-    outname = os.path.join(tmpdir, 'lzj_emb.jpg')
+    picname = os.path.join(tmpdir, f'lzj_tmp_{count}.jpg')
     cv2.imwrite(picname, frame)
-    tmpst = time.time()
+    count += 1
+    pbar.update()
+pbar.close()
+
+print("Embedding...")
+e2est = time.time()
+pbar = tqdm.tqdm(total=count)
+for i in range(count):
+    pbar.update(1)
+    picname = os.path.join(tmpdir, f'lzj_tmp_{i}.jpg')
+    outname = os.path.join(tmpdir, f'lzj_emb_{i}.jpg')
     cmd = f"embed {picname} {wmname} {outname}\n".encode('utf-8')
     server.stdin.write(cmd)
     server.stdin.flush()
     echo = server.stdout.readline()
-    tmped = time.time()
-    emtimeacc += tmped - tmpst
-    wmed_frame = cv2.imread(outname)
-    video_writer.write(wmed_frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
+e2eed = time.time()
 cap.release()
+pbar.close()
+
+print("Writing video...")
+pbar = tqdm.tqdm(total=count)
+for i in range(count):
+    pbar.update(1)
+    outname = os.path.join(tmpdir, f'lzj_emb_{i}.jpg')
+    wmed_frame = cv2.imread(outname)
+    video_writer.write(wmed_frame)
 video_writer.release()
 pbar.close()
-e2eed = time.time()
 
-print("End to end", e2eed - e2est)
-print("Embed", emtimeacc)
+
+print("Extracting watermark...")
+pbar = tqdm.tqdm(total=count)
+for i in range(count):
+    pbar.update(1)
+    picname = os.path.join(tmpdir, f'lzj_emb_{i}.jpg')
+    outname = os.path.join(tmpdir, f'lzj_ext_{i}.jpg')
+    cmd = f"extract {wmrows} {wmcols} {picname} {outname}\n".encode('utf-8')
+    server.stdin.write(cmd)
+    server.stdin.flush()
+    echo = server.stdout.readline()
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+pbar.close()
+
+print("Writing watermark...")
+video_writer = cv2.VideoWriter(extract_path, int(fourcc), fps, (wmcols, wmrows))
+pbar = tqdm.tqdm(total=count)
+for i in range(count):
+    pbar.update(1)
+    outname = os.path.join(tmpdir, f'lzj_ext_{i}.jpg')
+    wmed_frame = cv2.imread(outname)
+    video_writer.write(wmed_frame)
+video_writer.release()
+pbar.close()
+
+
+os.system("rm /dev/shm/lzj_*")
+
